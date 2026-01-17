@@ -45,26 +45,42 @@ npm install @ai-sdk/google      # Gemini
 npm install ollama-ai-provider  # Local Ollama
 ```
 
-## Usage
+## Quick Start
 
-### CLI (easiest)
+Pick your setup:
+
+### Option 1: Standalone CLI
 
 ```bash
-# Just run it
-npx lazy-changelog generate
+# Install
+npm install lazy-changelog @ai-sdk/anthropic
 
-# Include code diffs (better results, uses more tokens)
-npx lazy-changelog generate --diffs
+# Set your API key
+export ANTHROPIC_API_KEY=sk-ant-...
 
-# Prepend to your existing changelog
+# Generate changelog
 npx lazy-changelog generate --diffs --prepend CHANGELOG.md
 ```
 
-Run `lazy-changelog generate --help` for all the options.
+Add to package.json for releases:
 
-### With Nx Release
+```json
+{
+  "scripts": {
+    "changelog": "lazy-changelog generate --diffs --prepend CHANGELOG.md",
+    "release": "npm run changelog && npm version patch"
+  }
+}
+```
 
-Add this to `nx.json`:
+### Option 2: Nx Release
+
+```bash
+# Install
+npm install lazy-changelog @ai-sdk/anthropic
+```
+
+Add to `nx.json`:
 
 ```json
 {
@@ -82,9 +98,42 @@ Add this to `nx.json`:
 }
 ```
 
-Then `nx release` does its thing and you get AI-generated changelogs.
+Then just run:
 
-### Programmatic
+```bash
+nx release
+```
+
+### Option 3: GitHub Actions
+
+Create `.github/workflows/changelog.yml`:
+
+```yaml
+name: Changelog
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+      - run: npm install -g lazy-changelog @ai-sdk/anthropic
+      - run: lazy-changelog generate --diffs --tag "${GITHUB_REF#refs/tags/}" --prepend CHANGELOG.md
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add CHANGELOG.md
+          git commit -m "docs: changelog" && git push || true
+```
+
+### Option 4: Programmatic API
 
 ```typescript
 import { generateChangelog } from 'lazy-changelog';
@@ -93,6 +142,8 @@ const changelog = await generateChangelog({
   aiProvider: 'anthropic',
   includeDiffs: true,
 });
+
+console.log(changelog);
 ```
 
 ## Token usage warning
@@ -201,33 +252,6 @@ Nx renderOptions:
 | `includeDiffs` | `false` | `true`, `false`, or an object with limits |
 | `customPrompt` | built-in | Your own prompt if you want |
 | `aiBaseUrl` | default | For proxies or custom endpoints |
-
-## GitHub Actions
-
-```yaml
-name: Changelog
-on:
-  push:
-    tags: ['v*']
-
-jobs:
-  changelog:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-      - run: npm install -g lazy-changelog @ai-sdk/anthropic
-      - run: lazy-changelog generate --tag "${GITHUB_REF#refs/tags/}" --prepend CHANGELOG.md
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      - run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add CHANGELOG.md
-          git commit -m "docs: changelog" && git push || true
-```
 
 ## Requirements
 
