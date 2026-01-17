@@ -1,3 +1,16 @@
+## v1.0.2 (2026-01-17)
+
+## v1.0.2
+
+### 🐛 Bug Fixes
+- [commits] Handle git diff in repositories with no commits
+- [code] Fix getStagedDiff() method to work with brand new repositories by checking for HEAD existence and using empty tree hash for initial diffs
+
+### 🛠️ Improvements
+- [code] Add hasHead detection logic using git rev-parse HEAD to determine repository state
+- [code] Implement conditional diff command generation based on repository state and includeUnstaged option
+- [code] Consolidate stat command generation to match the selected diff strategy
+
 ## v1.0.1 (2026-01-17)
 
 ## v1.0.1
