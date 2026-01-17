@@ -138,49 +138,33 @@ export const DEFAULT_DIFF_OPTIONS: Required<DiffOptions> = {
   includePatterns: undefined as unknown as string[],
 };
 
-export const DEFAULT_PROMPT = `You are a technical writer creating release notes for a software project.
+export const DEFAULT_PROMPT = `You are a technical writer. Analyze the git commits and code diffs below, then write release notes.
 
-Analyze the following information and create a concise, user-friendly changelog summary.
-
-## Input Sources
-
-### Commit Messages
-These are the git commit messages for this release:
+COMMITS:
 {changes}
 
 {diffs}
 
-## Guidelines
+TASK: Write a changelog entry based ONLY on what you see above. Do NOT make up features - describe what the actual code does.
 
-1. **Prioritize commit messages** - They describe the developer's intent
-2. **Use code diffs to fill gaps** - When commit messages are vague (like "ok", "fix", "update"), use the diff to understand what actually changed
-3. **Group by category** - Features, Improvements, Bug Fixes, etc.
-4. **Be user-focused** - Describe what changed from the user's perspective
-5. **Be concise** - One line per significant change
-6. **Use emoji sparingly** - One per category header is fine
+RULES:
+1. Read the code diffs carefully to understand what was actually built
+2. Group into: Features, Bug Fixes, Improvements (skip empty sections)
+3. If diffs are provided, prefix each item with [commits] or [code] to show the source
+4. Be specific - mention actual function names, components, or capabilities you see in the code
+5. Keep each item to one line
 
-## Output Format
-
-Return markdown content for the changelog entry. Structure it like this:
-
+FORMAT:
 ### ✨ Features
-- [commits] Feature descriptions based on commit messages
-- [code] Features discovered in code changes (only if not mentioned in commits)
+- [source] Description of actual feature from the code
 
 ### 🐛 Bug Fixes
-- [commits] Bug fixes mentioned in commits
-- [code] Bug fixes discovered in code changes
+- [source] Description of actual fix
 
 ### 🛠️ Improvements
-- Other improvements and refactoring
+- [source] Description of actual improvement
 
-**IMPORTANT rules for source attribution:**
-- If code diffs are provided, you MUST prefix EVERY item with either [commits] or [code] to show where the info came from
-- [commits] = information derived from the commit message text
-- [code] = information derived from analyzing the actual code diff
-- If NO code diffs are provided (only commit messages), then do NOT use any prefixes
-- Skip empty categories
-- If there are no meaningful changes, return: "Maintenance release with internal improvements."`;
+Now write the changelog based on the commits and code above:`;
 
 /**
  * Core AI changelog generator that works independently of Nx.
@@ -362,7 +346,36 @@ export class AIChangelogGenerator {
     const from = this.options.from || this.getLastTag();
     const to = this.options.to || 'HEAD';
 
-    const diffRange = from ? `${from}..${to}` : `${to}~10..${to}`;
+    let diffRange: string;
+    // Empty tree hash - universal constant in git for diffing against "nothing"
+    const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
+    if (from) {
+      diffRange = `${from}..${to}`;
+    } else {
+      // No tag found - this is likely an initial release, show all code
+      // For established repos with many commits but no tags, limit to last 10 commits
+      try {
+        const commitCount = parseInt(
+          execSync(`git rev-list --count ${to}`, {
+            encoding: 'utf-8',
+            cwd: this.cwd,
+          }).trim(),
+          10
+        );
+
+        if (commitCount <= 10) {
+          // Small repo or initial release - show everything
+          diffRange = `${EMPTY_TREE}..${to}`;
+        } else {
+          // Larger repo without tags - limit to recent commits
+          diffRange = `${to}~10..${to}`;
+        }
+      } catch {
+        // Fallback to diff against empty tree
+        diffRange = `${EMPTY_TREE}..${to}`;
+      }
+    }
 
     const excludeArgs = diffOptions.excludePatterns
       .map((p) => `':(exclude)${p}'`)
@@ -529,6 +542,7 @@ ${diff}
         const { createAnthropic } = await import('@ai-sdk/anthropic');
         const anthropic = createAnthropic({
           apiKey: process.env['ANTHROPIC_API_KEY'],
+          baseURL: baseUrl || 'https://api.anthropic.com/v1',
         });
         providerInstance = anthropic(model);
         break;

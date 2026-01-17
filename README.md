@@ -182,12 +182,13 @@ CLI flags:
 | `-m, --model` | Override the default model |
 | `-f, --from` | Start ref (tag, commit, branch) |
 | `-t, --to` | End ref (default: HEAD) |
+| `--tag` | Version for the changelog header (e.g., v1.0.0) |
 | `-d, --diffs` | Include code diffs |
 | `--diffs-auto` | Only include diffs when commits look sparse |
 | `--max-diff-chars` | Total diff size limit (default: 50000) |
 | `--max-file-chars` | Per-file limit (default: 5000) |
 | `-o, --output` | Write to file |
-| `--prepend` | Prepend to existing changelog |
+| `--prepend` | Prepend to existing changelog (creates if missing) |
 | `--summary-only` | Just the summary, no version header |
 
 Nx renderOptions:
@@ -218,7 +219,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
       - run: npm install -g lazy-changelog @ai-sdk/anthropic
-      - run: lazy-changelog generate --version "${GITHUB_REF#refs/tags/}" --prepend CHANGELOG.md
+      - run: lazy-changelog generate --tag "${GITHUB_REF#refs/tags/}" --prepend CHANGELOG.md
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       - run: |

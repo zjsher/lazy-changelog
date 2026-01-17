@@ -35,7 +35,7 @@ program
   .option('-m, --model <model>', 'AI model to use')
   .option('-f, --from <ref>', 'Git ref to compare from (tag, commit, branch)')
   .option('-t, --to <ref>', 'Git ref to compare to', 'HEAD')
-  .option('-v, --version <version>', 'Version string for changelog header')
+  .option('--tag <version>', 'Version string for changelog header (e.g., v1.0.0)')
   .option('-d, --diffs', 'Include code diffs in AI analysis')
   .option('--diffs-auto', 'Include diffs only when commit messages are sparse')
   .option('--max-diff-chars <chars>', 'Maximum total diff characters', '50000')
@@ -52,7 +52,7 @@ program
         aiModel: options.model,
         from: options.from,
         to: options.to,
-        version: options.version,
+        version: options.tag,
         aiBaseUrl: options.baseUrl,
         cwd: options.cwd,
         includeDiffs: options.diffs
@@ -79,14 +79,21 @@ program
       }
 
       if (options.prepend) {
-        // Prepend to existing file
-        const existingContent = existsSync(options.prepend)
+        // Prepend to existing file (or create if it doesn't exist)
+        const fileExists = existsSync(options.prepend);
+        const existingContent = fileExists
           ? readFileSync(options.prepend, 'utf-8')
           : '';
 
-        const newContent = result + '\n\n' + existingContent;
+        const newContent = existingContent
+          ? result + '\n\n' + existingContent
+          : result + '\n';
         writeFileSync(options.prepend, newContent);
-        console.log(`✅ Prepended changelog to ${options.prepend}`);
+        console.log(
+          fileExists
+            ? `✅ Prepended changelog to ${options.prepend}`
+            : `✅ Created ${options.prepend}`
+        );
       } else if (options.output) {
         // Write to file
         writeFileSync(options.output, result);
@@ -165,7 +172,7 @@ Or for post-tag hook (.git/hooks/post-tag):
 
 #!/bin/bash
 TAG_NAME=$1
-npx lazy-changelog generate --version "$TAG_NAME" --prepend CHANGELOG.md
+npx lazy-changelog generate --tag "$TAG_NAME" --prepend CHANGELOG.md
 `);
     }
 
@@ -199,7 +206,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          lazy-changelog generate --version "\${GITHUB_REF#refs/tags/}" --prepend CHANGELOG.md
+          lazy-changelog generate --tag "\${GITHUB_REF#refs/tags/}" --prepend CHANGELOG.md
 
       - name: Commit changelog
         run: |
