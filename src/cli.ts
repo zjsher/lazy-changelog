@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { AIChangelogGenerator, AICommitMessageGenerator, DEFAULT_MODELS } from './core.js';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 const program = new Command();
 
@@ -142,12 +142,13 @@ program
 
       if (options.execute) {
         // Actually commit with the generated message
-        try {
-          execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, {
-            stdio: 'inherit',
-            cwd: options.cwd,
-          });
-        } catch {
+        // Use spawnSync to avoid shell interpretation of special characters
+        const result = spawnSync('git', ['commit', '-m', message], {
+          stdio: 'inherit',
+          cwd: options.cwd,
+        });
+
+        if (result.status !== 0) {
           console.error('\n❌ Commit failed.');
           console.error('\n📋 Generated commit message:\n');
           console.error(message);
