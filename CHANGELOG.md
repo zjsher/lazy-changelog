@@ -1,3 +1,13 @@
+## v1.1.0 (2026-01-17)
+
+### ✨ Features
+- [cli] Add custom prompt support via `--prompt` option for both changelog and commit commands with placeholder substitution for {changes}, {diffs}, and other variables
+- [cli] Add new `prompt` command with `--changelog` and `--commit` flags to display DEFAULT_PROMPT and COMMIT_MESSAGE_PROMPT templates
+
+### 🛠️ Improvements
+- [cli] Import DEFAULT_PROMPT and COMMIT_MESSAGE_PROMPT constants from core module for prompt display functionality
+- [cli] Pass customPrompt parameter to AIChangelogGenerator and AICommitMessageGenerator constructors
+
 ## v1.0.2 (2026-01-17)
 
 ## v1.0.2
