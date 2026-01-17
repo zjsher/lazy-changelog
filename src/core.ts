@@ -705,9 +705,33 @@ export class AICommitMessageGenerator {
    */
   private getStagedDiff(): string {
     try {
-      const diffCmd = this.options.includeUnstaged
-        ? 'git diff HEAD'
-        : 'git diff --cached';
+      // Check if this is a brand new repo with no commits
+      let hasHead = true;
+      try {
+        execSync('git rev-parse HEAD', {
+          encoding: 'utf-8',
+          cwd: this.cwd,
+          stdio: 'pipe',
+        });
+      } catch {
+        hasHead = false;
+      }
+
+      let diffCmd: string;
+      let statCmd: string;
+
+      if (!hasHead) {
+        // New repo with no commits - diff staged files against empty tree
+        const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+        diffCmd = `git diff --cached ${EMPTY_TREE}`;
+        statCmd = `git diff --cached ${EMPTY_TREE} --stat`;
+      } else if (this.options.includeUnstaged) {
+        diffCmd = 'git diff HEAD';
+        statCmd = 'git diff HEAD --stat';
+      } else {
+        diffCmd = 'git diff --cached';
+        statCmd = 'git diff --cached --stat';
+      }
 
       const diff = execSync(diffCmd, {
         encoding: 'utf-8',
@@ -718,11 +742,6 @@ export class AICommitMessageGenerator {
       if (!diff) {
         return '';
       }
-
-      // Also get the stat for context
-      const statCmd = this.options.includeUnstaged
-        ? 'git diff HEAD --stat'
-        : 'git diff --cached --stat';
 
       const stat = execSync(statCmd, {
         encoding: 'utf-8',
