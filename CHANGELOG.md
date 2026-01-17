@@ -1,3 +1,23 @@
+## v1.0.0 (2026-01-17)
+
+Based on the commits and code diffs provided:
+
+### ✨ Features
+- [code] Add AI-powered commit message generation with `lazy-changelog commit` CLI command
+- [code] Add AICommitMessageGenerator class with staged diff analysis capability
+- [code] Add `generateCommitMessage` function for programmatic API usage
+- [code] Add `-e/--execute` flag to automatically run git commit with generated message
+- [code] Add `--prefix` option to prepend text like ticket numbers to commit messages
+- [code] Add `-a/--all` flag to include unstaged changes in commit message generation
+
+### 🛠️ Improvements
+- [code] Restructure README.md with clearer "Quick Start" section featuring 4 distinct setup options
+- [code] Add complete installation examples with specific AI provider packages (@ai-sdk/anthropic)
+- [code] Enhanced CLI usage examples with package.json scripts for release workflows
+- [code] Move GitHub Actions configuration into main setup options with improved workflow example
+- [code] Expand programmatic API example with console.log output demonstration
+- [code] Add git alias configuration example for `git lazy` shortcut
+
 ## v0.1.2 (2026-01-17)
 
 ## Version 0.1.2
