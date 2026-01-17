@@ -49,6 +49,7 @@
     "dev": "tsup --watch",
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc --noEmit",
+    "commit": "node ./dist/cli.js commit",
     "changelog": "node ./dist/cli.js generate --diffs --model claude-sonnet-4-20250514 --prepend CHANGELOG.md",
     "release": "pnpm run build && pnpm run changelog && pnpm version",
     "release:patch": "pnpm run build && pnpm version patch && pnpm run changelog:version",

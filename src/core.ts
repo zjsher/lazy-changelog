@@ -138,6 +138,30 @@ export const DEFAULT_DIFF_OPTIONS: Required<DiffOptions> = {
   includePatterns: undefined as unknown as string[],
 };
 
+export const COMMIT_MESSAGE_PROMPT = `You are writing a git commit message. Analyze the staged changes below and write a concise, informative commit message.
+
+STAGED CHANGES:
+{diffs}
+
+TASK: Write a commit message based ONLY on what you see above. Do NOT make up changes.
+
+RULES:
+1. Use conventional commit format: type(scope): description
+2. Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build
+3. Scope is optional but helpful (e.g., feat(auth): add login)
+4. First line should be under 72 characters
+5. If changes are complex, add a blank line then bullet points
+6. Be specific - mention actual function names, files, or components
+7. Focus on WHAT changed and WHY, not HOW
+
+EXAMPLES:
+- feat(api): add user authentication endpoint
+- fix: resolve null pointer in data processing
+- refactor(components): extract shared button logic
+- docs: update API documentation for v2 endpoints
+
+Now write the commit message:`;
+
 export const DEFAULT_PROMPT = `You are a technical writer. Analyze the git commits and code diffs below, then write release notes.
 
 COMMITS:
@@ -604,4 +628,190 @@ export async function generateSummary(
 ): Promise<string> {
   const generator = new AIChangelogGenerator(options);
   return generator.generateSummaryOnly();
+}
+
+/**
+ * Options for generating commit messages
+ */
+export interface CommitMessageOptions {
+  /**
+   * AI provider to use for summarization.
+   * Default: 'anthropic'
+   */
+  aiProvider?: 'anthropic' | 'openai' | 'google' | 'ollama';
+
+  /**
+   * Model to use for the AI provider.
+   */
+  aiModel?: string;
+
+  /**
+   * Base URL for the AI provider
+   */
+  aiBaseUrl?: string;
+
+  /**
+   * Custom prompt template. Use {diffs} as placeholder.
+   */
+  customPrompt?: string;
+
+  /**
+   * Working directory for git commands.
+   * Default: process.cwd()
+   */
+  cwd?: string;
+
+  /**
+   * Include unstaged changes as well as staged
+   */
+  includeUnstaged?: boolean;
+}
+
+/**
+ * AI-powered commit message generator
+ */
+export class AICommitMessageGenerator {
+  private options: CommitMessageOptions;
+  private cwd: string;
+
+  constructor(options: CommitMessageOptions = {}) {
+    this.options = options;
+    this.cwd = options.cwd || process.cwd();
+  }
+
+  /**
+   * Generate a commit message from staged changes
+   */
+  async generate(): Promise<string> {
+    const diff = this.getStagedDiff();
+
+    if (!diff) {
+      throw new Error('No staged changes found. Stage some files with `git add` first.');
+    }
+
+    console.log('📝 Analyzing staged changes...');
+
+    const provider = this.options.aiProvider || 'anthropic';
+    const model = this.options.aiModel || DEFAULT_MODELS[provider];
+    const prompt = this.options.customPrompt || COMMIT_MESSAGE_PROMPT;
+
+    const fullPrompt = prompt.replace('{diffs}', diff);
+
+    return this.callAIProvider(provider, model, fullPrompt);
+  }
+
+  /**
+   * Get staged diff
+   */
+  private getStagedDiff(): string {
+    try {
+      const diffCmd = this.options.includeUnstaged
+        ? 'git diff HEAD'
+        : 'git diff --cached';
+
+      const diff = execSync(diffCmd, {
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024,
+        cwd: this.cwd,
+      }).trim();
+
+      if (!diff) {
+        return '';
+      }
+
+      // Also get the stat for context
+      const statCmd = this.options.includeUnstaged
+        ? 'git diff HEAD --stat'
+        : 'git diff --cached --stat';
+
+      const stat = execSync(statCmd, {
+        encoding: 'utf-8',
+        cwd: this.cwd,
+      }).trim();
+
+      // Truncate if too large (keep it reasonable for commit messages)
+      const maxChars = 30000;
+      let truncatedDiff = diff;
+      if (diff.length > maxChars) {
+        truncatedDiff = diff.substring(0, maxChars) + '\n\n[diff truncated due to size]';
+      }
+
+      return `Files changed:\n${stat}\n\nDiff:\n${truncatedDiff}`;
+    } catch (error) {
+      console.warn('Failed to get staged diff:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Call the AI provider (reusing logic from changelog generator)
+   */
+  private async callAIProvider(
+    provider: string,
+    model: string,
+    prompt: string
+  ): Promise<string> {
+    const { generateText } = await import('ai');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let providerInstance: any;
+    const baseUrl = this.options.aiBaseUrl;
+
+    switch (provider) {
+      case 'anthropic': {
+        const { createAnthropic } = await import('@ai-sdk/anthropic');
+        const anthropic = createAnthropic({
+          apiKey: process.env['ANTHROPIC_API_KEY'],
+          baseURL: baseUrl || 'https://api.anthropic.com/v1',
+        });
+        providerInstance = anthropic(model);
+        break;
+      }
+      case 'openai': {
+        const { createOpenAI } = await import('@ai-sdk/openai');
+        const openai = createOpenAI({
+          apiKey: process.env['OPENAI_API_KEY'],
+          ...(baseUrl && { baseURL: baseUrl }),
+        });
+        providerInstance = openai(model);
+        break;
+      }
+      case 'google': {
+        const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
+        const google = createGoogleGenerativeAI({
+          apiKey: process.env['GOOGLE_API_KEY'],
+        });
+        providerInstance = google(model);
+        break;
+      }
+      case 'ollama': {
+        const { createOllama } = await import('ollama-ai-provider');
+        const ollama = createOllama({
+          baseURL: baseUrl || 'http://localhost:11434/api',
+        });
+        providerInstance = ollama(model);
+        break;
+      }
+      default:
+        throw new Error(`Unsupported AI provider: ${provider}`);
+    }
+
+    const result = await generateText({
+      model: providerInstance,
+      prompt,
+      maxOutputTokens: 500,
+    });
+
+    return result.text.trim();
+  }
+}
+
+/**
+ * Convenience function to generate a commit message
+ */
+export async function generateCommitMessage(
+  options: CommitMessageOptions = {}
+): Promise<string> {
+  const generator = new AICommitMessageGenerator(options);
+  return generator.generate();
 }

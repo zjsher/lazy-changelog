@@ -1,7 +1,8 @@
 import { Command } from 'commander';
-import { AIChangelogGenerator, DEFAULT_MODELS } from './core.js';
+import { AIChangelogGenerator, AICommitMessageGenerator, DEFAULT_MODELS } from './core.js';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { execSync } from 'child_process';
 
 const program = new Command();
 
@@ -104,6 +105,63 @@ program
       }
     } catch (error) {
       console.error('❌ Error generating changelog:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('commit')
+  .description('Generate an AI-powered commit message from staged changes')
+  .option(
+    '-p, --provider <provider>',
+    'AI provider (anthropic, openai, google, ollama)',
+    'anthropic'
+  )
+  .option('-m, --model <model>', 'AI model to use')
+  .option('--base-url <url>', 'Base URL for AI provider (for Ollama or proxies)')
+  .option('-a, --all', 'Include unstaged changes too')
+  .option('-e, --execute', 'Actually run git commit with the generated message')
+  .option('--prefix <text>', 'Prefix to prepend to the commit message (e.g., ticket number)')
+  .option('-C, --cwd <dir>', 'Working directory', process.cwd())
+  .action(async (options) => {
+    try {
+      const generator = new AICommitMessageGenerator({
+        aiProvider: options.provider,
+        aiModel: options.model,
+        aiBaseUrl: options.baseUrl,
+        cwd: options.cwd,
+        includeUnstaged: options.all,
+      });
+
+      let message = await generator.generate();
+
+      // Prepend prefix if provided
+      if (options.prefix) {
+        message = `${options.prefix}${message}`;
+      }
+
+      if (options.execute) {
+        // Actually commit with the generated message
+        try {
+          execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, {
+            stdio: 'inherit',
+            cwd: options.cwd,
+          });
+        } catch {
+          console.error('\n❌ Commit failed.');
+          console.error('\n📋 Generated commit message:\n');
+          console.error(message);
+          console.error('\nYou can copy the message above and commit manually.');
+          process.exit(1);
+        }
+      } else {
+        // Just output the message
+        console.log('\n📋 Suggested commit message:\n');
+        console.log(message);
+        console.log('\n💡 Run with -e to commit directly, or copy the message above.');
+      }
+    } catch (error) {
+      console.error('❌ Error generating commit message:', error);
       process.exit(1);
     }
   });

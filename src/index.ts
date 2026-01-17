@@ -1,14 +1,17 @@
 // Re-export core functionality for standalone usage
 export {
   AIChangelogGenerator,
+  AICommitMessageGenerator,
   generateChangelog,
   generateSummary,
+  generateCommitMessage,
   DEFAULT_MODELS,
   DEFAULT_DIFF_OPTIONS,
   DEFAULT_PROMPT,
+  COMMIT_MESSAGE_PROMPT,
 } from "./core.js";
 
-export type { AIChangelogOptions, DiffOptions } from "./core.js";
+export type { AIChangelogOptions, DiffOptions, CommitMessageOptions } from "./core.js";
 
 // Nx-specific imports
 import DefaultChangelogRenderer from "nx/release/changelog-renderer";
