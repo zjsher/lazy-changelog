@@ -1,5 +1,11 @@
 import { Command } from 'commander';
-import { AIChangelogGenerator, AICommitMessageGenerator, DEFAULT_MODELS } from './core.js';
+import {
+  AIChangelogGenerator,
+  AICommitMessageGenerator,
+  DEFAULT_MODELS,
+  DEFAULT_PROMPT,
+  COMMIT_MESSAGE_PROMPT,
+} from './core.js';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { execSync, spawnSync } from 'child_process';
@@ -45,6 +51,7 @@ program
   .option('--prepend <file>', 'Prepend to existing changelog file')
   .option('--summary-only', 'Output only the summary without version header')
   .option('--base-url <url>', 'Base URL for AI provider (for Ollama or proxies)')
+  .option('--prompt <text>', 'Custom prompt template (use {changes} and {diffs} placeholders)')
   .option('-C, --cwd <dir>', 'Working directory', process.cwd())
   .action(async (options) => {
     try {
@@ -56,6 +63,7 @@ program
         version: options.tag,
         aiBaseUrl: options.baseUrl,
         cwd: options.cwd,
+        customPrompt: options.prompt,
         includeDiffs: options.diffs
           ? {
               enabled: true,
@@ -119,6 +127,7 @@ program
   )
   .option('-m, --model <model>', 'AI model to use')
   .option('--base-url <url>', 'Base URL for AI provider (for Ollama or proxies)')
+  .option('--prompt <text>', 'Custom prompt template (use {diffs} placeholder)')
   .option('-a, --all', 'Include unstaged changes too')
   .option('-e, --execute', 'Actually run git commit with the generated message')
   .option('--prefix <text>', 'Prefix to prepend to the commit message (e.g., ticket number)')
@@ -130,6 +139,7 @@ program
         aiModel: options.model,
         aiBaseUrl: options.baseUrl,
         cwd: options.cwd,
+        customPrompt: options.prompt,
         includeUnstaged: options.all,
       });
 
@@ -187,6 +197,24 @@ program
       `  ollama       ${DEFAULT_MODELS.ollama.padEnd(28)} (local, no key needed)`
     );
     console.log('');
+  });
+
+program
+  .command('prompt')
+  .description('Show default prompts used for AI generation')
+  .option('--changelog', 'Show the default changelog prompt')
+  .option('--commit', 'Show the default commit message prompt')
+  .action((options) => {
+    if (options.changelog && !options.commit) {
+      console.log(DEFAULT_PROMPT);
+    } else if (options.commit && !options.changelog) {
+      console.log(COMMIT_MESSAGE_PROMPT);
+    } else {
+      console.log('=== Changelog Prompt ===\n');
+      console.log(DEFAULT_PROMPT);
+      console.log('\n=== Commit Message Prompt ===\n');
+      console.log(COMMIT_MESSAGE_PROMPT);
+    }
   });
 
 program
