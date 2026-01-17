@@ -1,3 +1,15 @@
+## v0.1.2 (2026-01-17)
+
+## Version 0.1.2
+
+### 🛠️ Improvements
+- [code] Restructured README.md with clearer "Quick Start" section featuring 4 distinct setup options (CLI, Nx Release, GitHub Actions, Programmatic API)
+- [code] Added complete installation examples with specific AI provider packages (@ai-sdk/anthropic)
+- [code] Enhanced CLI usage examples with package.json scripts for release workflows
+- [code] Moved GitHub Actions configuration from separate section into main setup options with improved workflow example
+- [code] Expanded programmatic API example with console.log output demonstration
+- [code] Reorganized documentation structure moving GitHub Actions section into Option 3 of Quick Start
+
 ## 0.1.0 (2026-01-17)
 
 ### ✨ Features
