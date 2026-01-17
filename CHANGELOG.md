@@ -1,3 +1,14 @@
+## v1.0.1 (2026-01-17)
+
+## v1.0.1
+
+### 🐛 Bug Fixes
+- [code] Replace execSync with spawnSync for git commit execution to avoid shell interpretation of special characters in commit messages
+
+### 🛠️ Improvements
+- [code] Import spawnSync from child_process module for safer command execution
+- [code] Update error handling to check spawnSync result status instead of try-catch block
+
 ## v1.0.0 (2026-01-17)
 
 Based on the commits and code diffs provided:
