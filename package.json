@@ -1,6 +1,6 @@
 {
   "name": "lazy-changelog",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "You write bad commits. We get it. lazy-changelog reads your code anyway and writes a proper changelog for you.",
   "license": "MIT",
   "author": "QuickFlo",
