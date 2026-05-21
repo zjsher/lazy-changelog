@@ -1,3 +1,17 @@
+## v1.2.0 (2026-05-21)
+
+### ✨ Features
+- [code] Add multi-ecosystem version detection support with auto-scan for project files (package.json, deno.json, Cargo.toml, pyproject.toml, composer.json, pubspec.yaml, mix.exs, *.gemspec, VERSION files)
+- [code] Add `--version-file` CLI option to specify explicit path to version file with automatic ecosystem detection
+- [code] Add `--version-file-kind` CLI option to override parser kind (npm, deno, cargo, pyproject, composer, pubspec, gemspec, mix, text)
+- [code] Add `detectKindFromPath`, `detectProjectVersion`, `parseVersionFromContent`, and `readVersionFile` functions for version file parsing
+- [code] Add `VersionFileKind` type and export version detection utilities from core module
+
+### 🛠️ Improvements
+- [code] Replace runtime package.json reads with build-time version injection via `__LAZY_CHANGELOG_VERSION__` constant in tsup config
+- [code] Add `versionFile` and `versionFileKind` options to `AIChangelogRenderOptions` interface for Nx integration
+- [code] Update CLI help text with version file options and ecosystem compatibility table in README
+
 ## v1.1.0 (2026-01-17)
 
 ### ✨ Features
