@@ -185,6 +185,47 @@ Use `--diffs-auto` if you only want diffs when your commit messages are particul
 
 For Ollama users: local models = no token costs, go wild.
 
+## Version detection (no `package.json` required)
+
+`lazy-changelog` doesn't care what language you write in. The version that lands in the changelog header is resolved in this order:
+
+1. `--tag <version>` (explicit override)
+2. `--version-file <path>` (explicit file; parser inferred from filename, or override with `--version-file-kind`)
+3. Auto-scan the repo for known files
+4. `git describe --tags --abbrev=0`
+5. `Unreleased`
+
+Auto-scan order:
+
+| File | Ecosystem |
+|------|-----------|
+| `package.json` | Node / Bun / JavaScript / TypeScript |
+| `deno.json` / `deno.jsonc` / `jsr.json` | Deno / JSR |
+| `Cargo.toml` | Rust |
+| `pyproject.toml` | Python (PEP 621 or Poetry) |
+| `composer.json` | PHP |
+| `pubspec.yaml` | Dart / Flutter |
+| `mix.exs` | Elixir |
+| `*.gemspec` | Ruby |
+| `VERSION` / `VERSION.txt` / `version.txt` | Plain text |
+
+Go projects don't have a version field in `go.mod` — they fall through to the `git describe` fallback automatically.
+
+Override examples:
+
+```bash
+# Explicit file (kind inferred from name)
+lazy-changelog generate --version-file Cargo.toml
+
+# Non-standard filename, force a parser
+lazy-changelog generate --version-file ./packages/core/version.toml --version-file-kind cargo
+
+# Plain text VERSION file
+lazy-changelog generate --version-file VERSION
+```
+
+Kinds: `npm`, `deno`, `cargo`, `pyproject`, `composer`, `pubspec`, `gemspec`, `mix`, `text`.
+
 ## What gets included
 
 The tool figures out what to analyze based on your git tags:

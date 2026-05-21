@@ -5,24 +5,30 @@ import {
   DEFAULT_MODELS,
   DEFAULT_PROMPT,
   COMMIT_MESSAGE_PROMPT,
+  type VersionFileKind,
 } from './core.js';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { execSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 const program = new Command();
 
-// Get version from package.json
-let version = '0.0.0';
-try {
-  const pkgPath = join(__dirname, '..', 'package.json');
-  if (existsSync(pkgPath)) {
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    version = pkg.version;
-  }
-} catch {
-  // Ignore
-}
+// Injected at build time by tsup (define). Falls back if running unbundled.
+declare const __LAZY_CHANGELOG_VERSION__: string;
+const version =
+  typeof __LAZY_CHANGELOG_VERSION__ !== 'undefined'
+    ? __LAZY_CHANGELOG_VERSION__
+    : (() => {
+        try {
+          const pkgPath = join(__dirname, '..', 'package.json');
+          if (existsSync(pkgPath)) {
+            return JSON.parse(readFileSync(pkgPath, 'utf-8')).version ?? '0.0.0';
+          }
+        } catch {
+          /* ignore */
+        }
+        return '0.0.0';
+      })();
 
 program
   .name('lazy-changelog')
@@ -52,6 +58,14 @@ program
   .option('--summary-only', 'Output only the summary without version header')
   .option('--base-url <url>', 'Base URL for AI provider (for Ollama or proxies)')
   .option('--prompt <text>', 'Custom prompt template (use {changes} and {diffs} placeholders)')
+  .option(
+    '--version-file <path>',
+    'Path to version file (e.g. Cargo.toml, pyproject.toml, VERSION). Auto-detects ecosystem files by default.'
+  )
+  .option(
+    '--version-file-kind <kind>',
+    'Override parser kind: npm | deno | cargo | pyproject | composer | pubspec | gemspec | mix | text'
+  )
   .option('-C, --cwd <dir>', 'Working directory', process.cwd())
   .action(async (options) => {
     try {
@@ -61,6 +75,8 @@ program
         from: options.from,
         to: options.to,
         version: options.tag,
+        versionFile: options.versionFile,
+        versionFileKind: options.versionFileKind as VersionFileKind | undefined,
         aiBaseUrl: options.baseUrl,
         cwd: options.cwd,
         customPrompt: options.prompt,

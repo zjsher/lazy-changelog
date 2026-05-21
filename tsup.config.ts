@@ -1,4 +1,9 @@
 import { defineConfig } from 'tsup';
+import { readFileSync } from 'fs';
+
+const pkgVersion = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
+).version;
 
 export default defineConfig([
   // Main library build (for Nx and programmatic usage)
@@ -34,6 +39,9 @@ export default defineConfig([
     ],
     banner: {
       js: '#!/usr/bin/env node',
+    },
+    define: {
+      __LAZY_CHANGELOG_VERSION__: JSON.stringify(pkgVersion),
     },
   },
 ]);

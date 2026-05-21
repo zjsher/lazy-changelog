@@ -9,9 +9,18 @@ export {
   DEFAULT_DIFF_OPTIONS,
   DEFAULT_PROMPT,
   COMMIT_MESSAGE_PROMPT,
+  detectKindFromPath,
+  detectProjectVersion,
+  parseVersionFromContent,
+  readVersionFile,
 } from "./core.js";
 
-export type { AIChangelogOptions, DiffOptions, CommitMessageOptions } from "./core.js";
+export type {
+  AIChangelogOptions,
+  DiffOptions,
+  CommitMessageOptions,
+  VersionFileKind,
+} from "./core.js";
 
 // Nx-specific imports
 import DefaultChangelogRenderer from "nx/release/changelog-renderer";
@@ -20,7 +29,7 @@ import type { DefaultChangelogRenderOptions } from "nx/release/changelog-rendere
 import type { NxReleaseConfig } from "nx/src/command-line/release/config/config";
 import type { RemoteReleaseClient } from "nx/src/command-line/release/utils/remote-release-clients/remote-release-client";
 
-import { AIChangelogGenerator, type DiffOptions } from "./core.js";
+import { AIChangelogGenerator, type DiffOptions, type VersionFileKind } from "./core.js";
 
 // Re-export types for convenience
 export type { ChangelogChange } from "nx/src/command-line/release/changelog";
@@ -68,6 +77,18 @@ export interface AIChangelogRenderOptions extends DefaultChangelogRenderOptions 
    * Can be a boolean (true = enabled with defaults) or a DiffOptions object.
    */
   includeDiffs?: boolean | DiffOptions;
+
+  /**
+   * Explicit path to a project version file (relative to repo root).
+   * If omitted, auto-detects across package.json, deno.json, Cargo.toml,
+   * pyproject.toml, composer.json, pubspec.yaml, mix.exs, *.gemspec, VERSION.
+   */
+  versionFile?: string;
+
+  /**
+   * Parser kind override for {@link versionFile}.
+   */
+  versionFileKind?: VersionFileKind;
 }
 
 /**
@@ -141,6 +162,8 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
         customPrompt: options.customPrompt,
         aiBaseUrl: options.aiBaseUrl,
         includeDiffs: options.includeDiffs,
+        versionFile: options.versionFile,
+        versionFileKind: options.versionFileKind,
         version: this.changelogEntryVersion,
       });
 

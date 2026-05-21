@@ -1,4 +1,219 @@
 import { execSync } from 'child_process';
+import { readFileSync, existsSync, readdirSync } from 'fs';
+import { join, basename } from 'path';
+
+/**
+ * Parser kinds for project version files.
+ *
+ * - `npm`: package.json (Node, Bun, JavaScript, TypeScript)
+ * - `deno`: deno.json / deno.jsonc / jsr.json
+ * - `cargo`: Cargo.toml (Rust)
+ * - `pyproject`: pyproject.toml (Python — supports [project] and [tool.poetry])
+ * - `composer`: composer.json (PHP)
+ * - `pubspec`: pubspec.yaml (Dart / Flutter)
+ * - `gemspec`: *.gemspec (Ruby)
+ * - `mix`: mix.exs (Elixir)
+ * - `text`: plain text file containing only a version (e.g. VERSION, VERSION.txt)
+ */
+export type VersionFileKind =
+  | 'npm'
+  | 'deno'
+  | 'cargo'
+  | 'pyproject'
+  | 'composer'
+  | 'pubspec'
+  | 'gemspec'
+  | 'mix'
+  | 'text';
+
+/**
+ * Auto-detection order. First match with a non-empty version wins.
+ * For globs (gemspec), the directory is scanned for a matching file.
+ */
+const AUTO_DETECT_FILES: Array<
+  { name: string; kind: VersionFileKind } | { glob: RegExp; kind: VersionFileKind }
+> = [
+  { name: 'package.json', kind: 'npm' },
+  { name: 'deno.json', kind: 'deno' },
+  { name: 'deno.jsonc', kind: 'deno' },
+  { name: 'jsr.json', kind: 'deno' },
+  { name: 'Cargo.toml', kind: 'cargo' },
+  { name: 'pyproject.toml', kind: 'pyproject' },
+  { name: 'composer.json', kind: 'composer' },
+  { name: 'pubspec.yaml', kind: 'pubspec' },
+  { name: 'pubspec.yml', kind: 'pubspec' },
+  { name: 'mix.exs', kind: 'mix' },
+  { glob: /\.gemspec$/i, kind: 'gemspec' },
+  { name: 'VERSION', kind: 'text' },
+  { name: 'VERSION.txt', kind: 'text' },
+  { name: 'version.txt', kind: 'text' },
+];
+
+/**
+ * Infer a parser kind from a file path's basename.
+ * Returns null if the file isn't recognized.
+ */
+export function detectKindFromPath(filePath: string): VersionFileKind | null {
+  const base = basename(filePath).toLowerCase();
+  if (base === 'package.json') return 'npm';
+  if (base === 'deno.json' || base === 'deno.jsonc' || base === 'jsr.json') return 'deno';
+  if (base === 'cargo.toml') return 'cargo';
+  if (base === 'pyproject.toml') return 'pyproject';
+  if (base === 'composer.json') return 'composer';
+  if (base === 'pubspec.yaml' || base === 'pubspec.yml') return 'pubspec';
+  if (base === 'mix.exs') return 'mix';
+  if (base.endsWith('.gemspec')) return 'gemspec';
+  if (base === 'version' || base === 'version.txt') return 'text';
+  return null;
+}
+
+function stripJsonComments(s: string): string {
+  return s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+/**
+ * Extract the body of a TOML section `[header]` — lines after the header
+ * up to the next `[...]` header or end-of-file. Returns null if the section
+ * isn't present.
+ */
+function findTomlSection(content: string, header: string): string | null {
+  const target = `[${header}]`;
+  const lines = content.split('\n');
+  const out: string[] = [];
+  let inSection = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const isHeader =
+      trimmed.startsWith('[') && trimmed.endsWith(']') && !trimmed.startsWith('[[');
+    if (isHeader) {
+      if (inSection) break;
+      if (trimmed === target) {
+        inSection = true;
+        continue;
+      }
+    }
+    if (inSection) out.push(line);
+  }
+  return inSection ? out.join('\n') : null;
+}
+
+/**
+ * Parse a version string out of a file's contents given the parser kind.
+ * Returns null if no version field is present.
+ */
+export function parseVersionFromContent(
+  content: string,
+  kind: VersionFileKind
+): string | null {
+  switch (kind) {
+    case 'npm':
+    case 'composer': {
+      try {
+        const json = JSON.parse(content);
+        return typeof json.version === 'string' ? json.version : null;
+      } catch {
+        return null;
+      }
+    }
+    case 'deno': {
+      try {
+        const json = JSON.parse(stripJsonComments(content));
+        return typeof json.version === 'string' ? json.version : null;
+      } catch {
+        return null;
+      }
+    }
+    case 'cargo': {
+      const section = findTomlSection(content, 'package');
+      if (!section) return null;
+      const m = section.match(/^\s*version\s*=\s*["']([^"']+)["']/m);
+      return m ? m[1] : null;
+    }
+    case 'pyproject': {
+      for (const header of ['project', 'tool.poetry']) {
+        const section = findTomlSection(content, header);
+        if (!section) continue;
+        const m = section.match(/^\s*version\s*=\s*["']([^"']+)["']/m);
+        if (m) return m[1];
+      }
+      return null;
+    }
+    case 'pubspec': {
+      const m = content.match(/^version\s*:\s*["']?([^\s"'#\n]+)["']?/m);
+      return m ? m[1] : null;
+    }
+    case 'gemspec': {
+      const m = content.match(/\.version\s*=\s*["']([^"']+)["']/);
+      return m ? m[1] : null;
+    }
+    case 'mix': {
+      const m = content.match(/version\s*:\s*["']([^"']+)["']/);
+      return m ? m[1] : null;
+    }
+    case 'text': {
+      const trimmed = content.trim();
+      return trimmed ? trimmed.split(/\s+/)[0] : null;
+    }
+  }
+}
+
+/**
+ * Find a project version by scanning the working directory for known files.
+ * Returns the first non-empty version found in {@link AUTO_DETECT_FILES} order,
+ * or null if no recognized file exists.
+ */
+export function detectProjectVersion(cwd: string): string | null {
+  let dirEntries: string[] | null = null;
+  for (const entry of AUTO_DETECT_FILES) {
+    let filePath: string | null = null;
+    if ('name' in entry) {
+      const candidate = join(cwd, entry.name);
+      if (existsSync(candidate)) filePath = candidate;
+    } else {
+      if (dirEntries === null) {
+        try {
+          dirEntries = readdirSync(cwd);
+        } catch {
+          dirEntries = [];
+        }
+      }
+      const match = dirEntries.find((f) => entry.glob.test(f));
+      if (match) filePath = join(cwd, match);
+    }
+
+    if (!filePath) continue;
+    try {
+      const content = readFileSync(filePath, 'utf-8');
+      const version = parseVersionFromContent(content, entry.kind);
+      if (version) return version;
+    } catch {
+      // Skip unreadable files
+    }
+  }
+  return null;
+}
+
+/**
+ * Read a version from an explicit file. If `kind` is omitted, it's inferred
+ * from the file's basename via {@link detectKindFromPath}. Throws if the file
+ * doesn't exist or its kind can't be determined.
+ */
+export function readVersionFile(
+  filePath: string,
+  kind?: VersionFileKind
+): string | null {
+  if (!existsSync(filePath)) {
+    throw new Error(`Version file not found: ${filePath}`);
+  }
+  const resolvedKind = kind ?? detectKindFromPath(filePath);
+  if (!resolvedKind) {
+    throw new Error(
+      `Cannot infer version-file kind from "${filePath}". Pass an explicit kind.`
+    );
+  }
+  const content = readFileSync(filePath, 'utf-8');
+  return parseVersionFromContent(content, resolvedKind);
+}
 
 /**
  * Configuration for including code diffs in AI analysis
@@ -93,9 +308,26 @@ export interface AIChangelogOptions {
 
   /**
    * Version string for the changelog header.
-   * Default: auto-detect from package.json or git tag
+   * Default: auto-detect via {@link versionFile} (or its auto-detection) and git tag fallback.
    */
   version?: string;
+
+  /**
+   * Explicit path to a version file (e.g. `Cargo.toml`, `pyproject.toml`, `VERSION`).
+   * If omitted, the working directory is scanned for known files in this order:
+   * package.json, deno.json/jsonc, jsr.json, Cargo.toml, pyproject.toml,
+   * composer.json, pubspec.yaml, mix.exs, *.gemspec, VERSION / VERSION.txt / version.txt.
+   *
+   * Final fallback when nothing matches: `git describe --tags --abbrev=0`.
+   */
+  versionFile?: string;
+
+  /**
+   * Parser kind override for {@link versionFile}. By default the kind is inferred
+   * from the file's basename. Pass this when the filename doesn't follow
+   * convention (e.g. a custom path to TOML you want parsed as `cargo`).
+   */
+  versionFileKind?: VersionFileKind;
 
   /**
    * Working directory for git commands.
@@ -236,28 +468,35 @@ export class AIChangelogGenerator {
   }
 
   /**
-   * Get the version string
+   * Get the version string for the changelog header.
+   *
+   * Resolution order:
+   * 1. Explicit `version` option (e.g. CLI `--tag`)
+   * 2. Explicit `versionFile` (kind inferred from filename or overridden via `versionFileKind`)
+   * 3. Auto-detect across known ecosystem files in `cwd`
+   * 4. `git describe --tags --abbrev=0`
+   * 5. `'Unreleased'`
    */
   private getVersion(): string {
     if (this.options.version) {
       return this.options.version;
     }
 
-    // Try to get from package.json
-    try {
-      const pkgJson = execSync('cat package.json', {
-        encoding: 'utf-8',
-        cwd: this.cwd,
-      });
-      const pkg = JSON.parse(pkgJson);
-      if (pkg.version) {
-        return pkg.version;
+    if (this.options.versionFile) {
+      try {
+        const v = readVersionFile(
+          join(this.cwd, this.options.versionFile),
+          this.options.versionFileKind
+        );
+        if (v) return v;
+      } catch (e) {
+        console.warn(`⚠️  Failed to read version file: ${(e as Error).message}`);
       }
-    } catch {
-      // Ignore
+    } else {
+      const detected = detectProjectVersion(this.cwd);
+      if (detected) return detected;
     }
 
-    // Try to get from latest tag
     try {
       return execSync('git describe --tags --abbrev=0 2>/dev/null', {
         encoding: 'utf-8',
