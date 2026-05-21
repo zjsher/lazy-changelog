@@ -349,6 +349,8 @@ Then just run `git lazy` to stage + generate + commit.
 | `-o, --output` | Write to file |
 | `--prepend` | Prepend to existing changelog (creates if missing) |
 | `--summary-only` | Just the summary, no version header |
+| `--version-file` | Explicit project version file (Cargo.toml, pyproject.toml, VERSION, etc.) |
+| `--version-file-kind` | Override parser kind (npm, deno, cargo, pyproject, composer, pubspec, gemspec, mix, text) |
 
 Nx renderOptions:
 
