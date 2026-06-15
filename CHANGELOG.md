@@ -1,3 +1,22 @@
+## v1.3.0 (2026-06-15)
+
+## v1.3.0
+
+### ✨ Features
+- [code] Add auto-detection of the latest AI model per provider at runtime via new `resolveDefaultModel` function in `src/models.ts`
+- [code] Add `--model-tier` CLI flag for both `generate` and `commit` commands to select between `balanced` (default), `newest`, and `fast` model tiers when no explicit model is pinned
+- [code] Add `aiModelTier` option to `AIChangelogOptions`, `CommitMessageOptions`, and `AIChangelogRenderOptions` interfaces
+- [code] Add `ModelTier` and `ModelProvider` types, exported from both `core.ts` and `index.ts`
+- [code] Add `FALLBACK_MODELS` and `DEFAULT_MODEL_TIER` constants exported from the public API, replacing the previous `DEFAULT_MODELS` hardcoded map
+
+### 🛠️ Improvements
+- [code] Deprecate `DEFAULT_MODELS` in favor of `FALLBACK_MODELS`; the old export is kept as an alias for backward compatibility and is only used when runtime model detection fails
+- [code] Update `providers` command description and help text to clarify that listed models are fallbacks, not defaults, and explain the auto-detection behavior
+- [code] Update `-m, --model` help text to indicate auto-detection is the default when no model is specified
+- [code] Remove hardcoded model (`claude-sonnet-4-20250514`) from `changelog` and `changelog:version` npm scripts, relying on auto-detection instead
+- [code] Pass `aiModelTier` through to `AIChangelogGenerator` in the Nx `AIChangelogRenderer`
+- [code] Update README tables to document `--model-tier` flag and `aiModelTier` Nx render option
+
 ## v1.2.0 (2026-05-21)
 
 ### ✨ Features
