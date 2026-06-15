@@ -45,7 +45,12 @@ program
     'AI provider (anthropic, openai, google, ollama)',
     'anthropic'
   )
-  .option('-m, --model <model>', 'AI model to use')
+  .option('-m, --model <model>', 'AI model to use (default: auto-detect latest)')
+  .option(
+    '--model-tier <tier>',
+    'Tier to auto-detect when --model is unset: balanced | newest | fast',
+    'balanced'
+  )
   .option('-f, --from <ref>', 'Git ref to compare from (tag, commit, branch)')
   .option('-t, --to <ref>', 'Git ref to compare to', 'HEAD')
   .option('--tag <version>', 'Version string for changelog header (e.g., v1.0.0)')
@@ -72,6 +77,7 @@ program
       const generator = new AIChangelogGenerator({
         aiProvider: options.provider,
         aiModel: options.model,
+        aiModelTier: options.modelTier,
         from: options.from,
         to: options.to,
         version: options.tag,
@@ -141,7 +147,12 @@ program
     'AI provider (anthropic, openai, google, ollama)',
     'anthropic'
   )
-  .option('-m, --model <model>', 'AI model to use')
+  .option('-m, --model <model>', 'AI model to use (default: auto-detect latest)')
+  .option(
+    '--model-tier <tier>',
+    'Tier to auto-detect when --model is unset: balanced | newest | fast',
+    'balanced'
+  )
   .option('--base-url <url>', 'Base URL for AI provider (for Ollama or proxies)')
   .option('--prompt <text>', 'Custom prompt template (use {diffs} placeholder)')
   .option('-a, --all', 'Include unstaged changes too')
@@ -153,6 +164,7 @@ program
       const generator = new AICommitMessageGenerator({
         aiProvider: options.provider,
         aiModel: options.model,
+        aiModelTier: options.modelTier,
         aiBaseUrl: options.baseUrl,
         cwd: options.cwd,
         customPrompt: options.prompt,
@@ -195,10 +207,19 @@ program
 
 program
   .command('providers')
-  .description('List available AI providers and their default models')
+  .description('List available AI providers and their fallback models')
   .action(() => {
     console.log('\nAvailable AI Providers:\n');
-    console.log('  Provider     Default Model               Env Variable');
+    console.log(
+      '  By default the latest model per provider is auto-detected at runtime'
+    );
+    console.log(
+      '  (balanced tier). Override with --model, or change tier with --model-tier.'
+    );
+    console.log(
+      '  The models below are the fallbacks used when detection fails.\n'
+    );
+    console.log('  Provider     Fallback Model              Env Variable');
     console.log('  ─────────────────────────────────────────────────────────');
     console.log(
       `  anthropic    ${DEFAULT_MODELS.anthropic.padEnd(28)} ANTHROPIC_API_KEY`

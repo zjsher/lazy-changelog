@@ -51,12 +51,12 @@
     "typecheck": "tsc --noEmit",
     "commit": "node ./dist/cli.js commit",
     "commit:run": "node ./dist/cli.js commit -e",
-    "changelog": "node ./dist/cli.js generate --diffs --model claude-sonnet-4-20250514 --prepend CHANGELOG.md",
+    "changelog": "node ./dist/cli.js generate --diffs --prepend CHANGELOG.md",
     "release": "pnpm run build && pnpm run changelog && pnpm version",
     "release:patch": "pnpm run build && pnpm version patch && pnpm run changelog:version",
     "release:minor": "pnpm run build && pnpm version minor && pnpm run changelog:version",
     "release:major": "pnpm run build && pnpm version major && pnpm run changelog:version",
-    "changelog:version": "node ./dist/cli.js generate --diffs --model claude-sonnet-4-20250514 --tag \"v$(node -p \"require('./package.json').version\")\" --prepend CHANGELOG.md"
+    "changelog:version": "node ./dist/cli.js generate --diffs --tag \"v$(node -p \"require('./package.json').version\")\" --prepend CHANGELOG.md"
   },
   "peerDependencies": {
     "nx": ">=19.0.0"

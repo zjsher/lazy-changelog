@@ -1,6 +1,19 @@
 import { execSync } from 'child_process';
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { join, basename } from 'path';
+import {
+  resolveDefaultModel,
+  FALLBACK_MODELS,
+  type ModelTier,
+} from './models.js';
+
+export {
+  resolveDefaultModel,
+  FALLBACK_MODELS,
+  DEFAULT_MODEL_TIER,
+  type ModelProvider,
+  type ModelTier,
+} from './models.js';
 
 /**
  * Parser kinds for project version files.
@@ -269,13 +282,19 @@ export interface AIChangelogOptions {
 
   /**
    * Model to use for the AI provider.
-   * Default depends on provider:
-   * - anthropic: 'claude-sonnet-4-20250514'
-   * - openai: 'gpt-4o'
-   * - google: 'gemini-2.0-flash'
-   * - ollama: 'llama3.2'
+   * If omitted, the latest model for the provider is auto-detected at runtime
+   * (see {@link aiModelTier}), falling back to {@link FALLBACK_MODELS}.
    */
   aiModel?: string;
+
+  /**
+   * Which tier to target when auto-detecting the latest model (only used when
+   * {@link aiModel} is not set).
+   * - 'balanced' (default): Sonnet / gpt-4o / Gemini Flash class.
+   * - 'newest': newest model overall, often the flagship.
+   * - 'fast': Haiku / *-mini / *-flash-lite class.
+   */
+  aiModelTier?: ModelTier;
 
   /**
    * Custom prompt template for the AI. Use {changes} as placeholder for the changes list,
@@ -336,12 +355,12 @@ export interface AIChangelogOptions {
   cwd?: string;
 }
 
-export const DEFAULT_MODELS: Record<string, string> = {
-  anthropic: 'claude-sonnet-4-20250514',
-  openai: 'gpt-4o',
-  google: 'gemini-2.0-flash',
-  ollama: 'llama3.2',
-};
+/**
+ * @deprecated Models are now auto-detected at runtime via
+ * {@link resolveDefaultModel}. This alias of {@link FALLBACK_MODELS} is kept for
+ * backward compatibility and is only used when detection fails.
+ */
+export const DEFAULT_MODELS: Record<string, string> = FALLBACK_MODELS;
 
 export const DEFAULT_DIFF_OPTIONS: Required<DiffOptions> = {
   enabled: false,
@@ -760,7 +779,12 @@ ${diff}
    */
   private async generateAISummary(commits: string[]): Promise<string> {
     const provider = this.options.aiProvider || 'anthropic';
-    const model = this.options.aiModel || DEFAULT_MODELS[provider];
+    const model =
+      this.options.aiModel ||
+      (await resolveDefaultModel(provider, {
+        baseUrl: this.options.aiBaseUrl,
+        tier: this.options.aiModelTier,
+      }));
     const prompt = this.options.customPrompt || DEFAULT_PROMPT;
 
     const changesText = commits.join('\n');
@@ -881,8 +905,16 @@ export interface CommitMessageOptions {
 
   /**
    * Model to use for the AI provider.
+   * If omitted, the latest model for the provider is auto-detected at runtime
+   * (see {@link aiModelTier}), falling back to {@link FALLBACK_MODELS}.
    */
   aiModel?: string;
+
+  /**
+   * Which tier to target when auto-detecting the latest model (only used when
+   * {@link aiModel} is not set). 'balanced' (default) | 'newest' | 'fast'.
+   */
+  aiModelTier?: ModelTier;
 
   /**
    * Base URL for the AI provider
@@ -931,7 +963,12 @@ export class AICommitMessageGenerator {
     console.log('📝 Analyzing staged changes...');
 
     const provider = this.options.aiProvider || 'anthropic';
-    const model = this.options.aiModel || DEFAULT_MODELS[provider];
+    const model =
+      this.options.aiModel ||
+      (await resolveDefaultModel(provider, {
+        baseUrl: this.options.aiBaseUrl,
+        tier: this.options.aiModelTier,
+      }));
     const prompt = this.options.customPrompt || COMMIT_MESSAGE_PROMPT;
 
     const fullPrompt = prompt.replace('{diffs}', diff);

@@ -9,6 +9,9 @@ export {
   DEFAULT_DIFF_OPTIONS,
   DEFAULT_PROMPT,
   COMMIT_MESSAGE_PROMPT,
+  FALLBACK_MODELS,
+  DEFAULT_MODEL_TIER,
+  resolveDefaultModel,
   detectKindFromPath,
   detectProjectVersion,
   parseVersionFromContent,
@@ -20,6 +23,8 @@ export type {
   DiffOptions,
   CommitMessageOptions,
   VersionFileKind,
+  ModelProvider,
+  ModelTier,
 } from "./core.js";
 
 // Nx-specific imports
@@ -29,7 +34,12 @@ import type { DefaultChangelogRenderOptions } from "nx/release/changelog-rendere
 import type { NxReleaseConfig } from "nx/src/command-line/release/config/config";
 import type { RemoteReleaseClient } from "nx/src/command-line/release/utils/remote-release-clients/remote-release-client";
 
-import { AIChangelogGenerator, type DiffOptions, type VersionFileKind } from "./core.js";
+import {
+  AIChangelogGenerator,
+  type DiffOptions,
+  type VersionFileKind,
+  type ModelTier,
+} from "./core.js";
 
 // Re-export types for convenience
 export type { ChangelogChange } from "nx/src/command-line/release/changelog";
@@ -48,13 +58,16 @@ export interface AIChangelogRenderOptions extends DefaultChangelogRenderOptions 
 
   /**
    * Model to use for the AI provider.
-   * Default depends on provider:
-   * - anthropic: 'claude-sonnet-4-20250514'
-   * - openai: 'gpt-4o'
-   * - google: 'gemini-2.0-flash'
-   * - ollama: 'llama3.2'
+   * If omitted, the latest model for the provider is auto-detected at runtime
+   * (see {@link aiModelTier}), falling back to {@link FALLBACK_MODELS}.
    */
   aiModel?: string;
+
+  /**
+   * Which tier to target when auto-detecting the latest model (only used when
+   * {@link aiModel} is not set). 'balanced' (default) | 'newest' | 'fast'.
+   */
+  aiModelTier?: ModelTier;
 
   /**
    * Whether to enable AI summarization. Defaults to true.
@@ -159,6 +172,7 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
       const generator = new AIChangelogGenerator({
         aiProvider: options.aiProvider,
         aiModel: options.aiModel,
+        aiModelTier: options.aiModelTier,
         customPrompt: options.customPrompt,
         aiBaseUrl: options.aiBaseUrl,
         includeDiffs: options.includeDiffs,

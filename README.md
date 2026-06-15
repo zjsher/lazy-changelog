@@ -303,7 +303,8 @@ feat(core): add AI-powered commit message generation
 | Flag | What it does |
 |------|-------------|
 | `-p, --provider` | AI provider (anthropic, openai, google, ollama) |
-| `-m, --model` | Override the default model |
+| `-m, --model` | Pin a specific model (default: auto-detect the latest) |
+| `--model-tier` | Tier to auto-detect when `--model` is unset: `balanced` (default), `newest`, `fast` |
 | `-a, --all` | Include unstaged changes too |
 | `-e, --execute` | Actually run git commit with the message |
 | `--prefix` | Prefix to prepend (e.g., ticket number) |
@@ -338,7 +339,8 @@ Then just run `git lazy` to stage + generate + commit.
 | Flag | What it does |
 |------|-------------|
 | `-p, --provider` | anthropic, openai, google, or ollama |
-| `-m, --model` | Override the default model |
+| `-m, --model` | Pin a specific model (default: auto-detect the latest) |
+| `--model-tier` | Tier to auto-detect when `--model` is unset: `balanced` (default), `newest`, `fast` |
 | `-f, --from` | Start ref (tag, commit, branch) |
 | `-t, --to` | End ref (default: HEAD) |
 | `--tag` | Version for the changelog header (e.g., v1.0.0) |
@@ -357,7 +359,8 @@ Nx renderOptions:
 | Option | Default | Notes |
 |--------|---------|-------|
 | `aiProvider` | `anthropic` | |
-| `aiModel` | varies | Claude Sonnet, GPT-4o, Gemini Flash, or Llama 3.2 |
+| `aiModel` | auto-detect | Pin a model, or leave unset to auto-detect the latest per provider |
+| `aiModelTier` | `balanced` | Tier to auto-detect when `aiModel` is unset: `balanced`, `newest`, `fast` |
 | `enableAISummary` | `true` | Set false to use default Nx renderer |
 | `includeDiffs` | `false` | `true`, `false`, or an object with limits |
 | `customPrompt` | built-in | Your own prompt if you want |
