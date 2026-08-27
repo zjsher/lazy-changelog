@@ -1,3 +1,38 @@
+## v1.3.1 (2026-08-27)
+
+### 🐛 Bug Fixes
+- [commits] Fixed Nx commit generation so the renderer uses Nx's supplied `ChangelogChange[]` as the canonical change list instead of rediscovering commits from Git
+- [code] Added `renderDeterministicFallback` to guarantee a non-empty changelog with a `### Changes` section when there are changes but AI summarization is skipped, fails, or returns empty text
+- [code] `stripGeneratedChangelogTitle` strips AI-generated release/version headings from output so the prompt's "no title" rule is enforced even if the model ignores it
+
+### ✨ Features
+- [code] `AIChangelogOptions.changes` allows passing preformatted canonical changes (e.g. from Nx) directly into `AIChangelogGenerator`, bypassing Git commit discovery
+- [code] `formatNxChange` converts Nx `ChangelogChange` objects (hash, type, scope, description, body) into formatted change strings for the AI prompt
+
+### 🛠️ Improvements
+- [code] Added diagnostic logging for changelog input source/count, AI provider/model/prompt size, and AI response size/finish reason to aid debugging
+- [code] AI provider call now throws a descriptive error including provider, model, and finish reason when the response text is empty, triggering the deterministic fallback
+- [code] Updated changelog prompt rules to explicitly forbid release titles, version headings, dates, or introductory prose in AI output
+- [test] Added `test/nx-renderer.test.cjs` with coverage for the new Nx renderer behavior and fallback logic
+- [commits] Added a `test` script (`node --test test/*.test.cjs`) to `package.json`
+- [docs] Updated README to document Nx-as-canonical-source behavior and the deterministic fallback/logging guarantees
+
+## 1.3.0 (2026-08-27)
+
+### 🐛 Bug Fixes
+- [commits] Fixed Nx commit generation to use Nx's supplied `ChangelogChange[]` as the canonical change list instead of rediscovering commits from Git
+- [code] Added deterministic fallback rendering (`renderDeterministicFallback`) so a release with changes never silently produces only a version heading
+- [code] AI provider now throws an explicit error when it returns empty changelog text instead of silently succeeding
+
+### 🛠️ Improvements
+- [code] Added `changes` option to `AIChangelogOptions` allowing preformatted Nx changes to be summarized instead of Git-discovered commits
+- [code] Added `formatNxChange` to format Nx `ChangelogChange` entries (hash, type, scope, description, body) for AI prompts
+- [code] Added `stripGeneratedChangelogTitle` to strip AI-generated release titles/version headings from output
+- [code] Added logging of change source/count, selected provider/model, prompt size, response size, and finish reason for easier diagnosis
+- [code] Updated AI prompt rules to instruct the model to omit release titles, version headings, dates, and intro prose
+- [code] Added `test` script (`node --test test/*.test.cjs`) and new `test/nx-renderer.test.cjs` covering the Nx renderer behavior
+- [commits] Updated README and CHANGELOG to document Nx-as-canonical-source behavior and AI fallback guarantees
+
 ## 1.3.0 (2026-08-27)
 
 ### 🐛 Bug Fixes
