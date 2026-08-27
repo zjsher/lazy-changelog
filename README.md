@@ -38,6 +38,10 @@ No judgment.
 4. Sends it to Claude/GPT/Gemini/Ollama
 5. Returns something your PM can actually read
 
+When used as an Nx Release renderer, Nx's supplied `ChangelogChange[]` is the
+canonical change list. lazy-changelog does not rediscover a competing commit
+list from Git; Git is used only to add optional code-diff context.
+
 Works as a standalone CLI, an Nx Release renderer, or a programmatic API.
 
 ## Install
@@ -247,6 +251,12 @@ export GOOGLE_API_KEY=...
 ```
 
 Skip AI entirely (Nx only): `NX_CHANGELOG_SKIP_AI=true`
+
+If an Nx AI request fails or returns empty text, lazy-changelog falls back to a
+deterministic changelog made from Nx's supplied changes. A release with changes
+will never silently produce only a version heading. Release logs include the
+change source/count, selected provider/model, prompt size, response size, and
+finish reason so failures can be diagnosed after the fact.
 
 ## Example
 

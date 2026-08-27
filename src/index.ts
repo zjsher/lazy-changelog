@@ -41,6 +41,16 @@ import {
   type ModelTier,
 } from "./core.js";
 
+function formatNxChange(change: ChangelogChange): string {
+  const hash = change.shortHash ? `${change.shortHash} ` : "";
+  const scope = change.scope ? `(${change.scope})` : "";
+  const type = change.type ? `${change.type}${scope}: ` : "";
+  const body = change.body?.trim();
+  const summary = `${hash}${type}${change.description}`;
+
+  return body ? `${summary}\n${body}` : summary;
+}
+
 // Re-export types for convenience
 export type { ChangelogChange } from "nx/src/command-line/release/changelog";
 export type { DefaultChangelogRenderOptions } from "nx/release/changelog-renderer";
@@ -150,6 +160,10 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
   override async render(): Promise<string> {
     const options = this.changelogRenderOptions;
 
+    if (this.changes.length === 0) {
+      return this.renderDeterministicFallback();
+    }
+
     const envSkipAI =
       process.env["NX_CHANGELOG_SKIP_AI"] === "true" ||
       process.env["NX_CHANGELOG_SKIP_AI"] === "1";
@@ -162,12 +176,16 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
           "⏭️  AI changelog summarization skipped (NX_CHANGELOG_SKIP_AI=true)",
         );
       }
-      return super.render();
+      return this.renderDeterministicFallback();
     }
 
     const versionTitle = this.renderVersionTitle();
 
     try {
+      console.log(
+        `[lazy-changelog] Changelog input: source=nx changes=${this.changes.length}`,
+      );
+
       // Use the core generator for AI summarization
       const generator = new AIChangelogGenerator({
         aiProvider: options.aiProvider,
@@ -176,6 +194,7 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
         customPrompt: options.customPrompt,
         aiBaseUrl: options.aiBaseUrl,
         includeDiffs: options.includeDiffs,
+        changes: this.changes.map(formatNxChange),
         versionFile: options.versionFile,
         versionFileKind: options.versionFileKind,
         version: this.changelogEntryVersion,
@@ -206,8 +225,29 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
         "AI summarization failed, falling back to default renderer:",
         error,
       );
-      return super.render();
+      return this.renderDeterministicFallback();
     }
+  }
+
+  private async renderDeterministicFallback(): Promise<string> {
+    const versionTitle = this.renderVersionTitle();
+    const fallback = (await super.render()).trim();
+
+    if (fallback && fallback !== versionTitle) {
+      return fallback;
+    }
+
+    if (this.changes.length === 0) {
+      return fallback;
+    }
+
+    return [
+      versionTitle,
+      "",
+      "### Changes",
+      "",
+      ...this.changes.map((change) => this.formatChange(change)),
+    ].join("\n");
   }
 }
 

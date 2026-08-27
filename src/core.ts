@@ -314,6 +314,13 @@ export interface AIChangelogOptions {
   includeDiffs?: boolean | DiffOptions;
 
   /**
+   * Canonical, preformatted changes to summarize. When provided, these are used
+   * instead of discovering commits from Git. Nx renderers should pass the
+   * ChangelogChange[] values supplied by Nx through this option.
+   */
+  changes?: string[];
+
+  /**
    * Git ref to compare from (tag, commit, branch).
    * Default: auto-detect last tag
    */
@@ -428,6 +435,7 @@ RULES:
 3. If diffs are provided, prefix each item with [commits] or [code] to show the source
 4. Be specific - mention actual function names, components, or capabilities you see in the code
 5. Keep each item to one line
+6. Do NOT include a release title, version heading, date, or introductory prose; start with a ### section heading
 
 FORMAT:
 ### ✨ Features
@@ -583,6 +591,10 @@ export class AIChangelogGenerator {
    * Get commits for the changelog
    */
   private getCommits(): string[] {
+    if (this.options.changes) {
+      return this.options.changes.filter((change) => change.trim().length > 0);
+    }
+
     try {
       const from = this.options.from || this.getLastTag();
       const to = this.options.to || 'HEAD';
@@ -609,11 +621,18 @@ export class AIChangelogGenerator {
       }
 
       // Filter out release commits and merge commits
-      return commits.filter(
+      const filteredCommits = commits.filter(
         (line) =>
           !line.includes('chore(release)') &&
           !line.includes('Merge pull request')
       );
+
+      const source = from ? `range=${from}..${to}` : 'recent=50';
+      console.log(
+        `[lazy-changelog] Changelog input: source=git ${source} changes=${filteredCommits.length}`
+      );
+
+      return filteredCommits;
     } catch (error) {
       console.warn('Failed to fetch git commits:', error);
       return [];
@@ -807,6 +826,10 @@ ${diff}
       .replace('{changes}', changesText)
       .replace('{diffs}', diffsText ? `\n${diffsText}\n` : '');
 
+    console.log(
+      `[lazy-changelog] AI request: provider=${provider} model=${model} promptChars=${fullPrompt.length}`
+    );
+
     return this.callAIProvider(provider, model, fullPrompt);
   }
 
@@ -869,8 +892,38 @@ ${diff}
       maxOutputTokens: 1024,
     });
 
-    return result.text.trim();
+    const summary = stripGeneratedChangelogTitle(result.text);
+
+    console.log(
+      `[lazy-changelog] AI response: chars=${summary.length} finishReason=${result.finishReason}`
+    );
+
+    if (!summary) {
+      throw new Error(
+        `AI provider returned an empty changelog (provider=${provider}, model=${model}, finishReason=${result.finishReason})`
+      );
+    }
+
+    return summary;
   }
+}
+
+function stripGeneratedChangelogTitle(text: string): string {
+  const lines = text.trim().split('\n');
+  const firstLine = lines[0]?.trim() ?? '';
+  const isReleaseTitle = /^#{1,2}\s+(?:release notes|changelog)\b/i.test(firstLine);
+  const isVersionTitle = /^#{1,2}\s+v?\d+\.\d+\.\d+\b/i.test(firstLine);
+
+  if (!isReleaseTitle && !isVersionTitle) {
+    return text.trim();
+  }
+
+  lines.shift();
+  while (lines[0]?.trim() === '') {
+    lines.shift();
+  }
+
+  return lines.join('\n').trim();
 }
 
 /**

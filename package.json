@@ -47,6 +47,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "test": "node --test test/*.test.cjs",
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc --noEmit",
     "commit": "node ./dist/cli.js commit",
