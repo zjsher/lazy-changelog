@@ -39,8 +39,11 @@ No judgment.
 5. Returns something your PM can actually read
 
 When used as an Nx Release renderer, Nx's supplied `ChangelogChange[]` is the
-canonical change list. lazy-changelog does not rediscover a competing commit
-list from Git; Git is used only to add optional code-diff context.
+canonical source for descriptions, types, scopes, and affected-project data.
+lazy-changelog intersects hashed Nx changes with the previous-release-tag to
+`HEAD` boundary so stale historical entries cannot leak into a release. It does
+not rediscover or reinterpret commit messages from Git. If the boundary cannot
+be resolved safely, it keeps Nx's list unchanged.
 
 Works as a standalone CLI, an Nx Release renderer, or a programmatic API.
 
@@ -164,11 +167,15 @@ console.log(changelog);
 
 **Heads up:** The `--diffs` flag sends your actual code changes to the AI, which can eat through tokens fast on big releases.
 
-The defaults are pretty conservative (50k chars total, 5k per file), but if you're working on a large monorepo or had a lot of changes since the last release, you might want to dial it down:
+The defaults are conservative: 50k diff characters, 5k per file, 60k change-list
+characters, and 4,096 output tokens. Commit bodies supplied by Nx are not sent;
+the structured Nx description/type/scope metadata is enough and avoids enormous
+prompts. For a large monorepo, you can dial the budgets down:
 
 ```bash
 # Smaller limits
-lazy-changelog generate --diffs --max-diff-chars 20000 --max-file-chars 2000
+lazy-changelog generate --diffs --max-diff-chars 20000 --max-file-chars 2000 \
+  --max-changes-chars 30000 --max-output-tokens 3000
 ```
 
 Or in nx.json:
@@ -180,7 +187,9 @@ Or in nx.json:
       "enabled": true,
       "maxChars": 20000,
       "maxCharsPerFile": 2000
-    }
+    },
+    "maxChangesChars": 30000,
+    "maxOutputTokens": 3000
   }
 }
 ```
@@ -253,10 +262,10 @@ export GOOGLE_API_KEY=...
 Skip AI entirely (Nx only): `NX_CHANGELOG_SKIP_AI=true`
 
 If an Nx AI request fails or returns empty text, lazy-changelog falls back to a
-deterministic changelog made from Nx's supplied changes. A release with changes
-will never silently produce only a version heading. Release logs include the
-change source/count, selected provider/model, prompt size, response size, and
-finish reason so failures can be diagnosed after the fact.
+deterministic changelog made from the same release-scoped Nx changes. A release
+with changes will never silently produce only a version heading. Release logs
+include the tag range, received/selected counts, provider/model, prompt and
+change-list sizes, output budget, response size, and finish reason.
 
 ## Example
 
@@ -358,6 +367,8 @@ Then just run `git lazy` to stage + generate + commit.
 | `--diffs-auto` | Only include diffs when commits look sparse |
 | `--max-diff-chars` | Total diff size limit (default: 50000) |
 | `--max-file-chars` | Per-file limit (default: 5000) |
+| `--max-changes-chars` | Change-list prompt limit (default: 60000) |
+| `--max-output-tokens` | Changelog response budget (default: 4096) |
 | `-o, --output` | Write to file |
 | `--prepend` | Prepend to existing changelog (creates if missing) |
 | `--summary-only` | Just the summary, no version header |
@@ -373,6 +384,8 @@ Nx renderOptions:
 | `aiModelTier` | `balanced` | Tier to auto-detect when `aiModel` is unset: `balanced`, `newest`, `fast` |
 | `enableAISummary` | `true` | Set false to use default Nx renderer |
 | `includeDiffs` | `false` | `true`, `false`, or an object with limits |
+| `maxChangesChars` | `60000` | Maximum Nx change-description characters sent to AI |
+| `maxOutputTokens` | `4096` | Maximum changelog tokens the AI may emit |
 | `customPrompt` | built-in | Your own prompt if you want |
 | `aiBaseUrl` | default | For proxies or custom endpoints |
 

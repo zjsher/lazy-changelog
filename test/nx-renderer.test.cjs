@@ -1,4 +1,8 @@
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
+const { mkdtempSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
 const test = require('node:test');
 
 const lazyChangelog = require('../dist/index.js');
@@ -83,6 +87,29 @@ async function withFakeOpenAI(content, run) {
     } else {
       process.env.OPENAI_API_KEY = originalApiKey;
     }
+  }
+}
+
+async function withGitRelease(run) {
+  const directory = mkdtempSync(join(tmpdir(), 'lazy-changelog-test-'));
+  const originalCwd = process.cwd();
+  const git = (...args) =>
+    execFileSync('git', args, { cwd: directory, encoding: 'utf8' }).trim();
+
+  try {
+    git('init', '--quiet');
+    git('config', 'user.name', 'Lazy Changelog Test');
+    git('config', 'user.email', 'test@lazy-changelog.invalid');
+    git('commit', '--allow-empty', '--message', 'feat: stale historical feature');
+    const staleHash = git('rev-parse', '--short', 'HEAD');
+    git('tag', 'v1.0.0');
+    git('commit', '--allow-empty', '--message', 'fix: current release fix');
+    const currentHash = git('rev-parse', '--short', 'HEAD');
+    process.chdir(directory);
+    await run({ staleHash, currentHash });
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 
@@ -235,5 +262,98 @@ test('Nx renderer honors Nx no-change behavior without calling AI', async () => 
 
     assert.equal(output, '');
     assert.equal(getReceivedBody(), undefined);
+  });
+});
+
+test('Nx renderer scopes Nx changes to commits after the previous release tag', async () => {
+  await withGitRelease(async ({ staleHash, currentHash }) => {
+    await withFakeOpenAI('### 🐛 Bug Fixes\n- Fixed current release', async ({
+      baseUrl,
+      getReceivedBody,
+    }) => {
+      const renderer = createRenderer(
+        [
+          {
+            type: 'fix',
+            scope: '',
+            description: 'CURRENT_RELEASE_CHANGE',
+            affectedProjects: '*',
+            shortHash: currentHash,
+          },
+          {
+            type: 'feat',
+            scope: '',
+            description: 'STALE_HISTORICAL_CHANGE',
+            affectedProjects: '*',
+            shortHash: staleHash,
+          },
+        ],
+        baseUrl,
+      );
+
+      await renderer.render();
+      const prompt = getReceivedBody().input[0].content[0].text;
+
+      assert.match(prompt, /CURRENT_RELEASE_CHANGE/);
+      assert.doesNotMatch(prompt, /STALE_HISTORICAL_CHANGE/);
+    });
+  });
+});
+
+test('Nx renderer fallback preserves the same release-scoped Nx changes', async () => {
+  await withGitRelease(async ({ staleHash, currentHash }) => {
+    await withFakeOpenAI('   ', async ({ baseUrl }) => {
+      const renderer = createRenderer(
+        [
+          {
+            type: 'fix',
+            scope: '',
+            description: 'CURRENT_RELEASE_FALLBACK_CHANGE',
+            affectedProjects: '*',
+            shortHash: currentHash,
+          },
+          {
+            type: 'feat',
+            scope: '',
+            description: 'STALE_HISTORICAL_FALLBACK_CHANGE',
+            affectedProjects: '*',
+            shortHash: staleHash,
+          },
+        ],
+        baseUrl,
+      );
+
+      const output = await renderer.render();
+
+      assert.match(output, /CURRENT_RELEASE_FALLBACK_CHANGE/);
+      assert.doesNotMatch(output, /STALE_HISTORICAL_FALLBACK_CHANGE/);
+    });
+  });
+});
+
+test('Nx renderer bounds large change sets and reserves enough output tokens', async () => {
+  const changes = Array.from({ length: 391 }, (_, index) => ({
+    type: 'feat',
+    scope: 'large-release',
+    description: `Change ${index} ${'y'.repeat(300)}`,
+    body: `${'x'.repeat(1800)} BODY_SHOULD_NOT_BE_SENT_${index}`,
+    affectedProjects: '*',
+    shortHash: `dead${index.toString(16).padStart(4, '0')}`,
+  }));
+
+  await withFakeOpenAI('### ✨ Features\n- Summarized large release', async ({
+    baseUrl,
+    getReceivedBody,
+  }) => {
+    const renderer = createRenderer(changes, baseUrl);
+
+    await renderer.render();
+    const request = getReceivedBody();
+    const prompt = request.input[0].content[0].text;
+
+    assert.ok(prompt.length <= 65_000, `prompt was ${prompt.length} characters`);
+    assert.match(prompt, /changes truncated:/);
+    assert.doesNotMatch(prompt, /BODY_SHOULD_NOT_BE_SENT/);
+    assert.equal(request.max_output_tokens, 4096);
   });
 });

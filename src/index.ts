@@ -7,6 +7,8 @@ export {
   generateCommitMessage,
   DEFAULT_MODELS,
   DEFAULT_DIFF_OPTIONS,
+  DEFAULT_MAX_CHANGES_CHARS,
+  DEFAULT_MAX_OUTPUT_TOKENS,
   DEFAULT_PROMPT,
   COMMIT_MESSAGE_PROMPT,
   FALLBACK_MODELS,
@@ -28,6 +30,7 @@ export type {
 } from "./core.js";
 
 // Nx-specific imports
+import { execFileSync } from "child_process";
 import DefaultChangelogRenderer from "nx/release/changelog-renderer";
 import type { ChangelogChange } from "nx/src/command-line/release/changelog";
 import type { DefaultChangelogRenderOptions } from "nx/release/changelog-renderer";
@@ -45,10 +48,50 @@ function formatNxChange(change: ChangelogChange): string {
   const hash = change.shortHash ? `${change.shortHash} ` : "";
   const scope = change.scope ? `(${change.scope})` : "";
   const type = change.type ? `${change.type}${scope}: ` : "";
-  const body = change.body?.trim();
-  const summary = `${hash}${type}${change.description}`;
 
-  return body ? `${summary}\n${body}` : summary;
+  return `${hash}${type}${change.description}`;
+}
+
+function scopeNxChangesToRelease(changes: ChangelogChange[]): {
+  changes: ChangelogChange[];
+  range: string | null;
+  applied: boolean;
+} {
+  try {
+    const previousTag = execFileSync(
+      "git",
+      ["describe", "--tags", "--abbrev=0", "HEAD~1"],
+      { encoding: "utf8" },
+    ).trim();
+    const range = `${previousTag}..HEAD`;
+    const releaseHashes = execFileSync(
+      "git",
+      ["log", range, "--format=%h"],
+      { encoding: "utf8" },
+    )
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+
+    const isReleaseHash = (shortHash: string): boolean =>
+      releaseHashes.some(
+        (releaseHash) =>
+          releaseHash.startsWith(shortHash) || shortHash.startsWith(releaseHash),
+      );
+    const scopedChanges = changes.filter(
+      (change) => !change.shortHash || isReleaseHash(change.shortHash),
+    );
+    const hashedChangeCount = changes.filter((change) => change.shortHash).length;
+    const matchedHashCount = scopedChanges.filter((change) => change.shortHash).length;
+
+    if (hashedChangeCount > 0 && matchedHashCount === 0) {
+      return { changes, range, applied: false };
+    }
+
+    return { changes: scopedChanges, range, applied: true };
+  } catch {
+    return { changes, range: null, applied: false };
+  }
 }
 
 // Re-export types for convenience
@@ -100,6 +143,12 @@ export interface AIChangelogRenderOptions extends DefaultChangelogRenderOptions 
    * Can be a boolean (true = enabled with defaults) or a DiffOptions object.
    */
   includeDiffs?: boolean | DiffOptions;
+
+  /** Maximum characters of change descriptions included in the AI prompt. */
+  maxChangesChars?: number;
+
+  /** Maximum tokens the AI provider may emit. */
+  maxOutputTokens?: number;
 
   /**
    * Explicit path to a project version file (relative to repo root).
@@ -159,6 +208,15 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
 
   override async render(): Promise<string> {
     const options = this.changelogRenderOptions;
+    const receivedChangeCount = this.changes.length;
+    const scoped = scopeNxChangesToRelease(this.changes);
+    this.changes = scoped.changes;
+
+    if (scoped.range) {
+      console.log(
+        `[lazy-changelog] Nx release scope: range=${scoped.range} received=${receivedChangeCount} selected=${this.changes.length} applied=${scoped.applied}`,
+      );
+    }
 
     if (this.changes.length === 0) {
       return this.renderDeterministicFallback();
@@ -194,6 +252,8 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
         customPrompt: options.customPrompt,
         aiBaseUrl: options.aiBaseUrl,
         includeDiffs: options.includeDiffs,
+        maxChangesChars: options.maxChangesChars,
+        maxOutputTokens: options.maxOutputTokens,
         changes: this.changes.map(formatNxChange),
         versionFile: options.versionFile,
         versionFileKind: options.versionFileKind,

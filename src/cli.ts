@@ -58,6 +58,16 @@ program
   .option('--diffs-auto', 'Include diffs only when commit messages are sparse')
   .option('--max-diff-chars <chars>', 'Maximum total diff characters', '50000')
   .option('--max-file-chars <chars>', 'Maximum diff characters per file', '5000')
+  .option(
+    '--max-changes-chars <chars>',
+    'Maximum change-description characters included in the AI prompt',
+    '60000'
+  )
+  .option(
+    '--max-output-tokens <tokens>',
+    'Maximum tokens the AI provider may emit for the changelog',
+    '4096'
+  )
   .option('-o, --output <file>', 'Write output to file instead of stdout')
   .option('--prepend <file>', 'Prepend to existing changelog file')
   .option('--summary-only', 'Output only the summary without version header')
@@ -86,6 +96,8 @@ program
         aiBaseUrl: options.baseUrl,
         cwd: options.cwd,
         customPrompt: options.prompt,
+        maxChangesChars: parseInt(options.maxChangesChars, 10),
+        maxOutputTokens: parseInt(options.maxOutputTokens, 10),
         includeDiffs: options.diffs
           ? {
               enabled: true,

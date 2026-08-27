@@ -321,6 +321,18 @@ export interface AIChangelogOptions {
   changes?: string[];
 
   /**
+   * Maximum characters of canonical change descriptions included in the AI prompt.
+   * Default: 60000
+   */
+  maxChangesChars?: number;
+
+  /**
+   * Maximum tokens the AI provider may emit for the changelog.
+   * Default: 4096
+   */
+  maxOutputTokens?: number;
+
+  /**
    * Git ref to compare from (tag, commit, branch).
    * Default: auto-detect last tag
    */
@@ -395,6 +407,9 @@ export const DEFAULT_DIFF_OPTIONS: Required<DiffOptions> = {
   ],
   includePatterns: undefined as unknown as string[],
 };
+
+export const DEFAULT_MAX_CHANGES_CHARS = 60000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
 
 export const COMMIT_MESSAGE_PROMPT = `You are writing a git commit message. Analyze the staged changes below and write a concise, informative commit message.
 
@@ -806,7 +821,10 @@ ${diff}
       }));
     const prompt = this.options.customPrompt || DEFAULT_PROMPT;
 
-    const changesText = commits.join('\n');
+    const changesText = truncateChanges(
+      commits,
+      this.options.maxChangesChars ?? DEFAULT_MAX_CHANGES_CHARS
+    );
 
     const diffOptions = this.getDiffOptions();
     let diffsText = '';
@@ -826,11 +844,14 @@ ${diff}
       .replace('{changes}', changesText)
       .replace('{diffs}', diffsText ? `\n${diffsText}\n` : '');
 
+    const maxOutputTokens =
+      this.options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
+
     console.log(
-      `[lazy-changelog] AI request: provider=${provider} model=${model} promptChars=${fullPrompt.length}`
+      `[lazy-changelog] AI request: provider=${provider} model=${model} promptChars=${fullPrompt.length} changesChars=${changesText.length} maxOutputTokens=${maxOutputTokens}`
     );
 
-    return this.callAIProvider(provider, model, fullPrompt);
+    return this.callAIProvider(provider, model, fullPrompt, maxOutputTokens);
   }
 
   /**
@@ -839,7 +860,8 @@ ${diff}
   private async callAIProvider(
     provider: string,
     model: string,
-    prompt: string
+    prompt: string,
+    maxOutputTokens: number
   ): Promise<string> {
     const { generateText } = await import('ai');
 
@@ -889,7 +911,7 @@ ${diff}
     const result = await generateText({
       model: providerInstance,
       prompt,
-      maxOutputTokens: 1024,
+      maxOutputTokens,
     });
 
     const summary = stripGeneratedChangelogTitle(result.text);
@@ -906,6 +928,19 @@ ${diff}
 
     return summary;
   }
+}
+
+function truncateChanges(changes: string[], maxChars: number): string {
+  const text = changes.join('\n');
+  const safeMaxChars = Math.max(1000, maxChars);
+
+  if (text.length <= safeMaxChars) {
+    return text;
+  }
+
+  const omittedChars = text.length - safeMaxChars;
+  const suffix = `\n...[changes truncated: ${omittedChars} characters omitted]`;
+  return `${text.slice(0, safeMaxChars - suffix.length).trimEnd()}${suffix}`;
 }
 
 function stripGeneratedChangelogTitle(text: string): string {
