@@ -1,3 +1,16 @@
+## 1.3.0 (2026-08-27)
+
+### 🐛 Bug Fixes
+- [code] Fix Nx changelog renderer to use Nx's supplied `ChangelogChange[]` as the canonical change list instead of rediscovering commits from Git, via the new `changes` option on `AIChangelogOptions` and `formatNxChange` helper
+- [code] Fix AI changelog generation to strip erroneous release titles/version headings from AI output via new `stripGeneratedChangelogTitle` function
+- [code] Fix silent empty changelogs by throwing an error when the AI provider returns empty text instead of returning it unchecked
+
+### 🛠️ Improvements
+- [code] Add `renderDeterministicFallback` to `AIChangelogRenderer` so a release with changes never produces only a version heading when AI is skipped, fails, or returns no usable content
+- [code] Add logging of change source/count, selected provider/model, prompt size, response size, and finish reason to aid diagnosing failures
+- [code] Update prompt rules to instruct the AI to omit release titles, version headings, dates, and introductory prose
+- [code] Add `test` script to `package.json` and new `test/nx-renderer.test.cjs` covering the Nx renderer behavior
+
 ## v1.3.0 (2026-06-15)
 
 ## v1.3.0
