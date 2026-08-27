@@ -1,3 +1,20 @@
+## v1.3.2 (2026-08-27)
+
+### ✨ Features
+- [code] Added `--max-changes-chars` and `--max-output-tokens` CLI options (and corresponding `maxChangesChars`/`maxOutputTokens` renderer options) to control how much change-list text is sent to the AI and how many tokens it may emit in response
+- [code] Nx renderer now scopes changes to the range between the previous release tag and `HEAD` via `scopeNxChangesToRelease`, filtering out stale historical commits by matching short hashes against `git log`
+
+### 🐛 Bug Fixes
+- [commits] Fixed stale historical Nx changes leaking into a release's changelog when hashes weren't correctly bounded to the release range ("char bust")
+- [code] Renderer falls back to Nx's original unfiltered change list when the release tag boundary can't be safely resolved (e.g. no previous tag or no hash matches), preventing empty changelogs
+
+### 🛠️ Improvements
+- [code] Added `truncateChanges` in `core.ts` to cap the change-description text included in the AI prompt (default 60,000 chars) with a "changes truncated" marker instead of sending unbounded text
+- [code] `formatNxChange` no longer includes commit body text in the prompt, relying only on hash/type/scope/description to reduce prompt size
+- [code] AI request logging now includes tag range, received/selected change counts, prompt/change-list character counts, and max output tokens for easier diagnosis
+- [code] `generateText` output token limit is now configurable via `maxOutputTokens` instead of a hardcoded 1024
+- [docs] Updated README to document new size/token limits, release-scoping behavior, and default budgets (50k diff chars, 5k per file, 60k change-list chars, 4,096 output tokens)
+
 ## v1.3.1 (2026-08-27)
 
 ### 🐛 Bug Fixes
