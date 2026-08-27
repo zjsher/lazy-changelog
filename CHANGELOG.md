@@ -1,6 +1,41 @@
 ## 1.3.0 (2026-08-27)
 
 ### 🐛 Bug Fixes
+- [code] When used as an Nx Release renderer, `AIChangelogGenerator` now uses Nx's supplied `changes` array directly instead of rediscovering commits from Git, fixing incorrect/competing commit lists in Nx-generated changelogs
+- [code] Added `stripGeneratedChangelogTitle` to strip stray release/version headings the AI sometimes generates, preventing duplicate titles in output
+- [code] AI provider calls now throw an error when the response text is empty instead of silently returning blank content
+
+### ✨ Features
+- [code] Added `renderDeterministicFallback` in `AIChangelogRenderer` to produce a deterministic "### Changes" changelog from Nx's changes when AI is skipped, fails, or returns nothing
+- [code] Added `formatNxChange` to convert Nx's `ChangelogChange[]` entries (hash, type, scope, description, body) into text usable by the AI prompt
+
+### 🛠️ Improvements
+- [code] Added `changes` option to `AIChangelogOptions` allowing canonical, preformatted change lists to be passed instead of Git-derived commits
+- [code] Added logging for changelog input source/count, AI provider/model/prompt size, and AI response size/finish reason to aid debugging
+- [code] Updated AI prompt rules to forbid release titles/version headings/dates so generated content starts directly with a section heading
+- [code] Added `test` script (`node --test test/*.test.cjs`) and a new `test/nx-renderer.test.cjs` covering the Nx renderer behavior
+- [code] Updated README to document Nx as the canonical change source, the deterministic fallback behavior, and the `NX_CHANGELOG_SKIP_AI` diagnostic logging
+
+## 1.3.0 (2026-08-27)
+
+### ✨ Features
+- [code] AIChangelogGenerator now accepts a `changes` option to summarize canonical, preformatted change lists (e.g. from Nx) instead of discovering commits from Git
+- [code] Added `formatNxChange` and a deterministic `renderDeterministicFallback` in the Nx renderer to build a changelog directly from Nx's supplied `ChangelogChange[]` when AI is skipped, fails, or returns empty text
+
+### 🐛 Bug Fixes
+- [code] Nx renderer no longer falls back to a potentially empty default render; it guarantees a non-empty changelog with a "### Changes" section when Nx changes exist
+- [code] `AIProvider.generate` now throws an explicit error when the AI response text is empty instead of silently returning blank content
+- [code] Added `stripGeneratedChangelogTitle` to strip AI-generated release/version title lines so they don't duplicate Nx's version heading
+
+### 🛠️ Improvements
+- [code] Prompt instructions now explicitly forbid AI from including a release title, version heading, or intro prose
+- [code] Added `[lazy-changelog]` diagnostic logging for change source/count, selected provider/model, prompt size, response size, and finish reason
+- [code] Added `test` script (`node --test test/*.test.cjs`) and a new `test/nx-renderer.test.cjs` suite covering the Nx renderer behavior
+- [docs] Clarified in README that Git is used only for optional code-diff context when Nx supplies the canonical change list, and documented the AI failure fallback behavior
+
+## 1.3.0 (2026-08-27)
+
+### 🐛 Bug Fixes
 - [code] Fix Nx changelog renderer to use Nx's supplied `ChangelogChange[]` as the canonical change list instead of rediscovering commits from Git, via the new `changes` option on `AIChangelogOptions` and `formatNxChange` helper
 - [code] Fix AI changelog generation to strip erroneous release titles/version headings from AI output via new `stripGeneratedChangelogTitle` function
 - [code] Fix silent empty changelogs by throwing an error when the AI provider returns empty text instead of returning it unchecked
