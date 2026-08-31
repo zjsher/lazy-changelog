@@ -1,3 +1,16 @@
+## v1.3.3 (2026-08-31)
+
+### ✨ Features
+- [code] Added the Nx `baseRef` render option, which resolves a merge base with `HEAD` and scopes both change metadata and code diffs to branch-local work
+
+### 🐛 Bug Fixes
+- [code] Prevented divergent or stale release tags from leaking unrelated historical commits and repository-wide diffs into feature-branch release notes
+- [code] Capped `git diff --stat` context at 10,000 characters (or the configured diff limit when smaller), closing a prompt-budget bypass that could nearly double large diff payloads
+
+### 🛠️ Improvements
+- [test] Added regression coverage proving configured branch-base scoping excludes stale commit descriptions and diff content from the AI prompt
+- [docs] Documented branch-base release scoping and the diff-stat budget
+
 ## v1.3.2 (2026-08-27)
 
 ### ✨ Features

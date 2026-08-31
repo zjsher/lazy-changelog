@@ -52,18 +52,39 @@ function formatNxChange(change: ChangelogChange): string {
   return `${hash}${type}${change.description}`;
 }
 
-function scopeNxChangesToRelease(changes: ChangelogChange[]): {
+function scopeNxChangesToRelease(
+  changes: ChangelogChange[],
+  baseRef?: string,
+): {
   changes: ChangelogChange[];
+  from: string | null;
+  to: string;
   range: string | null;
   applied: boolean;
+  strategy: "base-ref" | "tag";
 } {
+  const to = "HEAD";
+
   try {
-    const previousTag = execFileSync(
-      "git",
-      ["describe", "--tags", "--abbrev=0", "HEAD~1"],
-      { encoding: "utf8" },
-    ).trim();
-    const range = `${previousTag}..HEAD`;
+    const from = baseRef
+      ? execFileSync("git", ["merge-base", baseRef, to], {
+          encoding: "utf8",
+        }).trim()
+      : execFileSync(
+          "git",
+          ["describe", "--tags", "--abbrev=0", `${to}~1`],
+          { encoding: "utf8" },
+        ).trim();
+
+    if (!from) {
+      throw new Error(
+        baseRef
+          ? `git merge-base returned no commit for ${baseRef} and ${to}`
+          : `git describe returned no previous release tag for ${to}`,
+      );
+    }
+
+    const range = `${from}..${to}`;
     const releaseHashes = execFileSync(
       "git",
       ["log", range, "--format=%h"],
@@ -85,12 +106,43 @@ function scopeNxChangesToRelease(changes: ChangelogChange[]): {
     const matchedHashCount = scopedChanges.filter((change) => change.shortHash).length;
 
     if (hashedChangeCount > 0 && matchedHashCount === 0) {
-      return { changes, range, applied: false };
+      if (baseRef) {
+        throw new Error(
+          `No Nx change hashes matched the branch-local release range ${range}`,
+        );
+      }
+      return {
+        changes,
+        from,
+        to,
+        range,
+        applied: false,
+        strategy: "tag",
+      };
     }
 
-    return { changes: scopedChanges, range, applied: true };
-  } catch {
-    return { changes, range: null, applied: false };
+    return {
+      changes: scopedChanges,
+      from,
+      to,
+      range,
+      applied: true,
+      strategy: baseRef ? "base-ref" : "tag",
+    };
+  } catch (error) {
+    if (baseRef) {
+      throw new Error(
+        `[lazy-changelog] Failed to scope Nx release from baseRef "${baseRef}": ${(error as Error).message}`,
+      );
+    }
+    return {
+      changes,
+      from: null,
+      to,
+      range: null,
+      applied: false,
+      strategy: "tag",
+    };
   }
 }
 
@@ -143,6 +195,14 @@ export interface AIChangelogRenderOptions extends DefaultChangelogRenderOptions 
    * Can be a boolean (true = enabled with defaults) or a DiffOptions object.
    */
   includeDiffs?: boolean | DiffOptions;
+
+  /**
+   * Branch ref used to scope Nx changes and diffs. The renderer resolves the
+   * merge base between this ref and HEAD, then uses that single range for both
+   * change selection and optional code-diff context. This is useful when
+   * releases are cut from feature branches and release tags may be divergent.
+   */
+  baseRef?: string;
 
   /** Maximum characters of change descriptions included in the AI prompt. */
   maxChangesChars?: number;
@@ -209,12 +269,13 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
   override async render(): Promise<string> {
     const options = this.changelogRenderOptions;
     const receivedChangeCount = this.changes.length;
-    const scoped = scopeNxChangesToRelease(this.changes);
+    const scoped = scopeNxChangesToRelease(this.changes, options.baseRef);
     this.changes = scoped.changes;
 
     if (scoped.range) {
+      const base = options.baseRef ? ` base=${options.baseRef}` : "";
       console.log(
-        `[lazy-changelog] Nx release scope: range=${scoped.range} received=${receivedChangeCount} selected=${this.changes.length} applied=${scoped.applied}`,
+        `[lazy-changelog] Nx release scope: strategy=${scoped.strategy}${base} range=${scoped.range} received=${receivedChangeCount} selected=${this.changes.length} applied=${scoped.applied}`,
       );
     }
 
@@ -255,6 +316,8 @@ export default class AIChangelogRenderer extends DefaultChangelogRenderer {
         maxChangesChars: options.maxChangesChars,
         maxOutputTokens: options.maxOutputTokens,
         changes: this.changes.map(formatNxChange),
+        from: scoped.from ?? undefined,
+        to: scoped.to,
         versionFile: options.versionFile,
         versionFileKind: options.versionFileKind,
         version: this.changelogEntryVersion,

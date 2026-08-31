@@ -107,13 +107,19 @@ Add to `nx.json`:
         "renderer": "lazy-changelog",
         "renderOptions": {
           "aiProvider": "anthropic",
-          "includeDiffs": true
+          "includeDiffs": true,
+          "baseRef": "origin/main"
         }
       }
     }
   }
 }
 ```
+
+`baseRef` is recommended when releases are cut from feature branches. The Nx
+renderer resolves the merge base between that ref and `HEAD`, then uses the
+same branch-local range for both the Nx change list and optional code diffs.
+Without `baseRef`, the renderer retains tag-based release scoping.
 
 Then just run:
 
@@ -167,8 +173,9 @@ console.log(changelog);
 
 **Heads up:** The `--diffs` flag sends your actual code changes to the AI, which can eat through tokens fast on big releases.
 
-The defaults are conservative: 50k diff characters, 5k per file, 60k change-list
-characters, and 4,096 output tokens. Commit bodies supplied by Nx are not sent;
+The defaults are conservative: 50k detailed-diff characters, 5k per file, a
+10k cap on diff stats, 60k change-list characters, and 4,096 output tokens.
+Commit bodies supplied by Nx are not sent;
 the structured Nx description/type/scope metadata is enough and avoids enormous
 prompts. For a large monorepo, you can dial the budgets down:
 
@@ -384,6 +391,7 @@ Nx renderOptions:
 | `aiModelTier` | `balanced` | Tier to auto-detect when `aiModel` is unset: `balanced`, `newest`, `fast` |
 | `enableAISummary` | `true` | Set false to use default Nx renderer |
 | `includeDiffs` | `false` | `true`, `false`, or an object with limits |
+| `baseRef` | unset | Resolve a merge base (for example `origin/main`) and scope both Nx changes and diffs to branch-local work |
 | `maxChangesChars` | `60000` | Maximum Nx change-description characters sent to AI |
 | `maxOutputTokens` | `4096` | Maximum changelog tokens the AI may emit |
 | `customPrompt` | built-in | Your own prompt if you want |

@@ -702,7 +702,7 @@ export class AIChangelogGenerator {
       : '';
 
     try {
-      const diffStat = execSync(
+      const rawDiffStat = execSync(
         `git diff ${diffRange} --stat ${includeArgs} -- . ${excludeArgs}`,
         {
           encoding: 'utf-8',
@@ -710,6 +710,10 @@ export class AIChangelogGenerator {
           cwd: this.cwd,
         }
       ).trim();
+      const diffStat = this.truncateDiffStat(
+        rawDiffStat,
+        Math.min(diffOptions.maxChars, 10_000)
+      );
 
       let diff = execSync(
         `git diff ${diffRange} ${includeArgs} -- . ${excludeArgs}`,
@@ -746,6 +750,20 @@ ${diff}
       console.warn('Failed to fetch git diff:', error);
       return '';
     }
+  }
+
+  /**
+   * Bound the file-stat section independently so a release touching many files
+   * cannot bypass the detailed-diff character budget.
+   */
+  private truncateDiffStat(diffStat: string, maxChars: number): string {
+    if (diffStat.length <= maxChars) {
+      return diffStat;
+    }
+
+    const note = '\n... [diff stat truncated]';
+    const contentChars = Math.max(0, maxChars - note.length);
+    return diffStat.substring(0, contentChars) + note;
   }
 
   /**

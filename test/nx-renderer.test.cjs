@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
-const { mkdtempSync, rmSync } = require('node:fs');
+const { mkdtempSync, rmSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const test = require('node:test');
@@ -26,7 +26,7 @@ const remoteReleaseClient = {
   remoteReleaseProviderName: null,
 };
 
-function createRenderer(changes, aiBaseUrl) {
+function createRenderer(changes, aiBaseUrl, renderOptions = {}) {
   return new AIChangelogRenderer({
     changes,
     changelogEntryVersion: '1.128.0',
@@ -41,10 +41,76 @@ function createRenderer(changes, aiBaseUrl) {
       includeDiffs: false,
       versionTitleDate: false,
       authors: false,
+      ...renderOptions,
     },
     conventionalCommitsConfig,
     remoteReleaseClient,
   });
+}
+
+async function withDivergentReleaseBase(run) {
+  const directory = mkdtempSync(join(tmpdir(), 'lazy-changelog-base-test-'));
+  const originalCwd = process.cwd();
+  const git = (...args) =>
+    execFileSync('git', args, { cwd: directory, encoding: 'utf8' }).trim();
+
+  try {
+    git('init', '--quiet');
+    git('config', 'user.name', 'Lazy Changelog Test');
+    git('config', 'user.email', 'test@lazy-changelog.invalid');
+    writeFileSync(join(directory, 'initial.txt'), 'initial\n');
+    git('add', 'initial.txt');
+    git('commit', '--message', 'chore: initial release');
+    git('tag', 'v1.0.0');
+
+    writeFileSync(join(directory, 'unrelated.txt'), 'STALE_DIFF_SENTINEL\n');
+    git('add', 'unrelated.txt');
+    git('commit', '--message', 'feat: unrelated historical dashboard work');
+    const staleHash = git('rev-parse', '--short', 'HEAD');
+
+    git('commit', '--allow-empty', '--message', 'chore(release): publish 1.1.0');
+    git('branch', 'release-base');
+
+    writeFileSync(join(directory, 'current.txt'), 'CURRENT_DIFF_SENTINEL\n');
+    git('add', 'current.txt');
+    git('commit', '--message', 'feat: current branch agent state stats');
+    const currentHash = git('rev-parse', '--short', 'HEAD');
+
+    process.chdir(directory);
+    await run({ staleHash, currentHash });
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+async function withLargeDiffStat(run) {
+  const directory = mkdtempSync(join(tmpdir(), 'lazy-changelog-stat-test-'));
+  const originalCwd = process.cwd();
+  const git = (...args) =>
+    execFileSync('git', args, { cwd: directory, encoding: 'utf8' }).trim();
+
+  try {
+    git('init', '--quiet');
+    git('config', 'user.name', 'Lazy Changelog Test');
+    git('config', 'user.email', 'test@lazy-changelog.invalid');
+    git('commit', '--allow-empty', '--message', 'chore: initial release');
+    git('tag', 'v1.0.0');
+
+    for (let index = 0; index < 200; index++) {
+      const name = `long-release-stat-file-${index.toString().padStart(3, '0')}-${'x'.repeat(40)}.txt`;
+      writeFileSync(join(directory, name), `change ${index}\n`);
+    }
+    git('add', '.');
+    git('commit', '--message', 'feat: add many release files');
+    const currentHash = git('rev-parse', '--short', 'HEAD');
+
+    process.chdir(directory);
+    await run({ currentHash });
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 async function withFakeOpenAI(content, run) {
@@ -327,6 +393,78 @@ test('Nx renderer fallback preserves the same release-scoped Nx changes', async 
 
       assert.match(output, /CURRENT_RELEASE_FALLBACK_CHANGE/);
       assert.doesNotMatch(output, /STALE_HISTORICAL_FALLBACK_CHANGE/);
+    });
+  });
+});
+
+test('Nx renderer scopes changes and diffs to the configured branch base', async () => {
+  await withDivergentReleaseBase(async ({ staleHash, currentHash }) => {
+    await withFakeOpenAI('### ✨ Features\n- Added agent state stats', async ({
+      baseUrl,
+      getReceivedBody,
+    }) => {
+      const renderer = createRenderer(
+        [
+          {
+            type: 'feat',
+            scope: 'dashboards',
+            description: 'CURRENT_BRANCH_CHANGE add agent state stats',
+            affectedProjects: '*',
+            shortHash: currentHash,
+          },
+          {
+            type: 'feat',
+            scope: 'dashboards',
+            description: 'STALE_HISTORICAL_CHANGE add height controls',
+            affectedProjects: '*',
+            shortHash: staleHash,
+          },
+        ],
+        baseUrl,
+        {
+          baseRef: 'release-base',
+          includeDiffs: true,
+        },
+      );
+
+      await renderer.render();
+      const prompt = getReceivedBody().input[0].content[0].text;
+
+      assert.match(prompt, /CURRENT_BRANCH_CHANGE/);
+      assert.match(prompt, /CURRENT_DIFF_SENTINEL/);
+      assert.doesNotMatch(prompt, /STALE_HISTORICAL_CHANGE/);
+      assert.doesNotMatch(prompt, /STALE_DIFF_SENTINEL/);
+    });
+  });
+});
+
+test('Nx renderer bounds diff stats as part of the AI context budget', async () => {
+  await withLargeDiffStat(async ({ currentHash }) => {
+    await withFakeOpenAI('### ✨ Features\n- Added release files', async ({
+      baseUrl,
+      getReceivedBody,
+    }) => {
+      const renderer = createRenderer(
+        [
+          {
+            type: 'feat',
+            scope: '',
+            description: 'add many release files',
+            affectedProjects: '*',
+            shortHash: currentHash,
+          },
+        ],
+        baseUrl,
+        {
+          includeDiffs: { enabled: true, maxChars: 1000 },
+        },
+      );
+
+      await renderer.render();
+      const prompt = getReceivedBody().input[0].content[0].text;
+
+      assert.match(prompt, /diff stat truncated/);
+      assert.ok(prompt.length < 5000, `prompt was ${prompt.length} characters`);
     });
   });
 });
